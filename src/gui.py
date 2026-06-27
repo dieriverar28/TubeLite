@@ -8,6 +8,7 @@ gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk, GdkPixbuf, GLib
 from threading import Thread
 import time
+from player import Player
 
 from youtube import YouTubeSearcher
 
@@ -205,8 +206,8 @@ class TubeLiteWindow(Gtk.Window):
         vbox.pack_start(hbox_bottom, False, False, 0)
         
         # Guardar URL del video en el row
-        row.video_url = video["url"]
-        row.video_id = video["id"]
+        row.video=video
+        
         
         row.add(vbox)
         self.results_list.add(row)
@@ -220,9 +221,11 @@ class TubeLiteWindow(Gtk.Window):
     
     def on_row_activated(self, listbox, row):
         """Callback cuando se hace doble clic en un resultado"""
-        if hasattr(row, 'video_url'):
-            self.status_label.set_text(f"Preparando: {row.video_url}")
-            # En v0.3 aquí llamaremos al reproductor
+
+        if hasattr(row, "video"):
+            self.status_label.set_text(f"Abriendo: {row.video['title']}") ")
+
+            Player.play(row.video['url'])
     
     def clear_results(self):
         """Limpiar la lista de resultados"""
