@@ -35,6 +35,9 @@ class Config:
     MPV_OPTS = [
         "--ytdl=yes",
         "--force-window=immediate",
+        "--vo=gpu",  # Video output simple sin GPU (X11)
+        "--hwdec=vaapi",
+        "--ytdl-format=bestvideo[height<=480]+bestaudio/best[height<=480]",
         "--cache=yes",
         "--cache-secs=5",  # Buffer pequeño
     ]
