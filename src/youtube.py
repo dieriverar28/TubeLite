@@ -7,6 +7,7 @@ import subprocess
 import json
 import re
 from typing import List, Dict, Optional
+from unittest import result
 
 
 class YouTubeSearcher:
@@ -54,31 +55,33 @@ class YouTubeSearcher:
             if result.returncode != 0:
                 return []
             
+
             # Parsear JSON
             videos = []
-
+            
             for line in result.stdout.splitlines():
-                line = line.strip()
+                    line = line.strip()
 
-                if not line:
-                    continue
-
-                try:
-                    entry = json.loads(line)
-
-                    videos.append({
-                        "id": entry.get("id", ""),
-                        "title": entry.get("title", "Sin título"),
-                        "duration": entry.get("duration", 0),
-                        "url": entry.get("webpage_url") or entry.get("url", ""),
-                        "uploader": entry.get("uploader", "Desconocido"),
-                        "view_count": entry.get("view_count", 0)
-                    })
-
-                except json.JSONDecodeError:
+                    if not line:
                         continue
 
-                return videos
+                    try:
+                        entry = json.loads(line)
+
+                        videos.append({
+                            "id": entry.get("id", ""),
+                            "title": entry.get("title", "Sin título"),
+                            "duration": entry.get("duration", 0),
+                            "url": entry.get("webpage_url") or entry.get("url", ""),
+                            "uploader": entry.get("uploader", "Desconocido"),
+                            "view_count": entry.get("view_count", 0)
+                        })
+
+                    except json.JSONDecodeError:
+                        continue
+
+            print(f"Se encontraron {len(videos)} videos")
+            return videos
         
         except subprocess.TimeoutExpired:
             print("Búsqueda expirada (timeout)")
