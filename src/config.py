@@ -1,6 +1,7 @@
 """
 Configuración de TubeLite
-Adaptada para hardware antiguo (AMD E-350)
+Adaptada para hardware MUY antiguo (AMD E-350)
+Sin GPU, usando X11 simple
 """
 
 import platform
@@ -20,7 +21,7 @@ class Config:
     
     # ========== CONFIGURACIÓN DE VIDEO ==========
     
-    # Calidad de video
+    # Calidad de video (MUY baja para E-350)
     if IS_LOW_END:
         VIDEO_QUALITY = "bestvideo[height<=360]"  # 360p max
         AUDIO_QUALITY = "bestaudio[aext=m4a]/bestaudio"
@@ -30,20 +31,14 @@ class Config:
     
     # ========== OPCIONES DE MPV ==========
     
-    # Opciones base (optimizadas para baja latencia)
+    # Opciones base MÍNIMAS para hardware muy antiguo
     MPV_OPTS = [
         "--ytdl=yes",
-        "--force-window=immediate",  # Abre ventana más rápido
-        "--cache=yes",  # Cache de stream
-        "--cache-secs=10",  # Buffer de 10 segundos
+        "--force-window=immediate",
+        "--vo=x11",  # Video output simple sin GPU (X11)
+        "--cache=yes",
+        "--cache-secs=5",  # Buffer pequeño
     ]
-    
-    # Audio/Video sincronización (solo opciones válidas)
-    if IS_LOW_END:
-        MPV_OPTS.extend([
-            "--profile=low-latency",  # Perfil de baja latencia
-            "--hwdec=auto",  # Aceleración por hardware si existe
-        ])
     
     # ========== CONFIGURACIÓN DE BÚSQUEDA ==========
     
@@ -63,3 +58,4 @@ class Config:
         print(f"RAM: {cls.MEMORY_GB:.1f}GB")
         print(f"Modo: {'Low-end ⚡' if cls.IS_LOW_END else 'Standard'}")
         print(f"Calidad: {cls.VIDEO_QUALITY}")
+        print(f"Video Output: x11 (sin GPU)")
