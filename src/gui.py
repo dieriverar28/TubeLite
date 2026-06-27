@@ -1,6 +1,6 @@
 """
 GUI de TubeLite usando GTK3 - v0.2
-Búsqueda real en YouTube sin bloquear la UI
+Búsqueda real en YouTube con reproducción en mpv
 """
 
 import gi
@@ -8,9 +8,9 @@ gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk, GdkPixbuf, GLib
 from threading import Thread
 import time
-from player import Player
 
 from youtube import YouTubeSearcher
+from player import Player
 
 
 class TubeLiteWindow(Gtk.Window):
@@ -149,7 +149,7 @@ class TubeLiteWindow(Gtk.Window):
             self._add_result_row(video)
         
         # Actualizar estado
-        self.status_label.set_text(f"Se encontraron {len(results)} resultados")
+        self.status_label.set_text(f"Se encontraron {len(results)} resultados. Doble clic para reproducir.")
         self.search_button.set_sensitive(True)
         self.search_entry.set_sensitive(True)
         self.is_searching = False
@@ -205,27 +205,27 @@ class TubeLiteWindow(Gtk.Window):
         
         vbox.pack_start(hbox_bottom, False, False, 0)
         
-        # Guardar URL del video en el row
-        row.video=video
-        
+        # Guardar datos del video en el row
+        row.video_url = video["url"]
+        row.video_id = video["id"]
+        row.video_title = video["title"]
         
         row.add(vbox)
         self.results_list.add(row)
     
-    def _search_error(self, error_msg: str):
-        """Mostrar error de búsqueda"""
-        self.status_label.set_text(f"Error: {error_msg}")
-        self.search_button.set_sensitive(True)
-        self.search_entry.set_sensitive(True)
-        self.is_searching = False
-    
     def on_row_activated(self, listbox, row):
         """Callback cuando se hace doble clic en un resultado"""
-
-        if hasattr(row, "video"):
-            self.status_label.set_text(f"Abriendo: {row.video['title']}") 
-
-            Player.play(row.video['url'])
+        if hasattr(row, 'video_url'):
+            # Actualizar estado
+            self.status_label.set_text(f"▶ Reproduciendo: {row.video_title}...")
+            
+            # Reproducir en thread para no bloquear UI
+            thread = Thread(
+                target=Player.play, 
+                args=(row.video_url, row.video_title),
+                daemon=True
+            )
+            thread.start()
     
     def clear_results(self):
         """Limpiar la lista de resultados"""
