@@ -58,7 +58,7 @@ class YouTubeSearcher:
 
             # Parsear JSON
             videos = []
-            
+
             for line in result.stdout.splitlines():
                     line = line.strip()
 
@@ -79,8 +79,7 @@ class YouTubeSearcher:
 
                     except json.JSONDecodeError:
                         continue
-
-            print(f"Se encontraron {len(videos)} videos")
+                    
             return videos
         
         except subprocess.TimeoutExpired:
