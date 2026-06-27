@@ -24,9 +24,13 @@ class Config:
     if IS_LOW_END:
         # Forzamos un techo de 480p para asegurar fluidez extrema en el AMD E-350
         YTDL_FORMAT = "bestvideo[height<=480]+bestaudio/best[height<=480]"
+        VIDEO_QUALITY = "bestvideo[height<=480]"  # <-- Agregada para compatibilidad
+        AUDIO_QUALITY = "bestaudio[aext=m4a]/bestaudio"
     else:
         # En hardware estándar, permitimos hasta 720p
         YTDL_FORMAT = "bestvideo[height<=720]+bestaudio/best[height<=720]"
+        VIDEO_QUALITY = "bestvideo[height<=720]"  # <-- Agregada para compatibilidad
+        AUDIO_QUALITY = "bestaudio"
     
     # ========== OPCIONES DE MPV ==========
     
