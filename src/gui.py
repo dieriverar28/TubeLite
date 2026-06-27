@@ -223,7 +223,7 @@ class TubeLiteWindow(Gtk.Window):
         """Callback cuando se hace doble clic en un resultado"""
 
         if hasattr(row, "video"):
-            self.status_label.set_text(f"Abriendo: {row.video['title']}") ")
+            self.status_label.set_text(f"Abriendo: {row.video['title']}") 
 
             Player.play(row.video['url'])
     
