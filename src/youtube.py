@@ -44,31 +44,40 @@ class YouTubeSearcher:
                 text=True,
                 timeout=15
             )
-            
+            print("RETURN CODE:", result.returncode)
+            print("STDOUT:")
+            print(result.stdout)
+            print("STDERR:")
+            print(result.stderr)
+
             if result.returncode != 0:
                 return []
             
             # Parsear JSON
-            try:
-                data = json.loads(result.stdout)
-            except json.JSONDecodeError:
-                return []
-            
-            # Extraer información de los videos
             videos = []
-            if "entries" in data:
-                for entry in data["entries"]:
-                    video = {
+
+            for line in result.stdout.splitlines():
+                line = line.strip()
+
+                if not line:
+                    continue
+
+                try:
+                    entry = json.loads(line)
+
+                    videos.append({
                         "id": entry.get("id", ""),
                         "title": entry.get("title", "Sin título"),
                         "duration": entry.get("duration", 0),
-                        "url": entry.get("url", ""),
+                        "url": entry.get("webpage_url") or entry.get("url", ""),
                         "uploader": entry.get("uploader", "Desconocido"),
                         "view_count": entry.get("view_count", 0)
-                    }
-                    videos.append(video)
-            
-            return videos
+                    })
+
+                except json.JSONDecodeError:
+                        continue
+
+                return videos
         
         except subprocess.TimeoutExpired:
             print("Búsqueda expirada (timeout)")
