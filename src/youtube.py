@@ -38,6 +38,7 @@ class YouTubeSearcher:
             ]
             
             # Ejecutar búsqueda
+            print(cmd)
             result = subprocess.run(
                 cmd,
                 capture_output=True,
