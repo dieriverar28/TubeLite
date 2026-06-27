@@ -30,12 +30,12 @@ class Config:
     
     # ========== OPCIONES DE MPV ==========
     
-    # Opciones base
+    # Opciones base (optimizadas para baja latencia)
     MPV_OPTS = [
         "--ytdl=yes",
         "--force-window=immediate",  # Abre ventana más rápido
         "--cache=yes",  # Cache de stream
-        "--demuxer-cache-duration=10",  # Buffer de 10 segundos
+        "--cache-secs=10",  # Buffer de 10 segundos (opción válida)
     ]
     
     # Audio/Video sincronización
@@ -43,7 +43,6 @@ class Config:
         MPV_OPTS.extend([
             "--profile=low-latency",  # Perfil de baja latencia
             "--audio-buffer=200",  # Buffer de audio mayor
-            "--vf=format=yuv420p",  # Formato optimizado
             "--hwdec=auto",  # Aceleración por hardware si existe
         ])
     else:
