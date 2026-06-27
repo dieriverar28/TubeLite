@@ -35,20 +35,14 @@ class Config:
         "--ytdl=yes",
         "--force-window=immediate",  # Abre ventana más rápido
         "--cache=yes",  # Cache de stream
-        "--cache-secs=10",  # Buffer de 10 segundos (opción válida)
+        "--cache-secs=10",  # Buffer de 10 segundos
     ]
     
-    # Audio/Video sincronización
+    # Audio/Video sincronización (solo opciones válidas)
     if IS_LOW_END:
         MPV_OPTS.extend([
             "--profile=low-latency",  # Perfil de baja latencia
-            "--audio-buffer=200",  # Buffer de audio mayor
             "--hwdec=auto",  # Aceleración por hardware si existe
-        ])
-    else:
-        MPV_OPTS.extend([
-            "--profile=default",
-            "--audio-buffer=100",
         ])
     
     # ========== CONFIGURACIÓN DE BÚSQUEDA ==========
