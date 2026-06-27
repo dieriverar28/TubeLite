@@ -42,7 +42,7 @@ class YouTubeSearcher:
                 cmd,
                 capture_output=True,
                 text=True,
-                timeout=15
+                timeout=60
             )
             print("RETURN CODE:", result.returncode)
             print("STDOUT:")
