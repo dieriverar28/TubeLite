@@ -1,7 +1,6 @@
 """
 Configuración de TubeLite
-Adaptada para hardware MUY antiguo (AMD E-350)
-Sin GPU, usando X11 simple
+Adaptada para hardware MUY antiguo (AMD E-350) con aceleración gráfica GPU/VAAPI
 """
 
 import platform
@@ -12,7 +11,7 @@ class Config:
     """Configuración global de TubeLite"""
     
     # Detección de hardware
-    CPU_CORES = psutil.cpu_count(logical=False)
+    CPU_CORES = psutil.cpu_count(logical=False) or 1
     MEMORY_GB = psutil.virtual_memory().total / (1024**3)
     SYSTEM = platform.system()
     
@@ -21,25 +20,25 @@ class Config:
     
     # ========== CONFIGURACIÓN DE VIDEO ==========
     
-    # Calidad de video (MUY baja para E-350)
+    # Formato dinámico según el hardware detectado
     if IS_LOW_END:
-        VIDEO_QUALITY = "bestvideo[height<=360]"  # 360p max
-        AUDIO_QUALITY = "bestaudio[aext=m4a]/bestaudio"
+        # Forzamos un techo de 480p para asegurar fluidez extrema en el AMD E-350
+        YTDL_FORMAT = "bestvideo[height<=480]+bestaudio/best[height<=480]"
     else:
-        VIDEO_QUALITY = "bestvideo[height<=720]"  # 720p
-        AUDIO_QUALITY = "bestaudio"
+        # En hardware estándar, permitimos hasta 720p
+        YTDL_FORMAT = "bestvideo[height<=720]+bestaudio/best[height<=720]"
     
     # ========== OPCIONES DE MPV ==========
     
-    # Opciones base MÍNIMAS para hardware muy antiguo
+    # Opciones base utilizando las variables dinámicas
     MPV_OPTS = [
         "--ytdl=yes",
         "--force-window=immediate",
-        "--vo=gpu",  # Video output simple sin GPU (X11)
-        "--hwdec=vaapi",
-        "--ytdl-format=bestvideo[height<=480]+bestaudio/best[height<=480]",
+        "--vo=gpu",       # Cambiado a gpu (vía OpenGL) que resultó ser la más fluida
+        "--hwdec=vaapi",  # Activa la decodificación por hardware de la Radeon integrada
+        f"--ytdl-format={YTDL_FORMAT}",
         "--cache=yes",
-        "--cache-secs=5",  # Buffer pequeño
+        "--cache-secs=10", # Un búfer de 10 seg ayuda a evitar tirones si el internet oscila
     ]
     
     # ========== CONFIGURACIÓN DE BÚSQUEDA ==========
@@ -55,9 +54,9 @@ class Config:
     @classmethod
     def print_info(cls):
         """Imprimir información de configuración"""
-        print(f"Hardware: {cls.SYSTEM}")
-        print(f"CPU cores: {cls.CPU_CORES}")
-        print(f"RAM: {cls.MEMORY_GB:.1f}GB")
-        print(f"Modo: {'Low-end ⚡' if cls.IS_LOW_END else 'Standard'}")
-        print(f"Calidad: {cls.VIDEO_QUALITY}")
-        print(f"Video Output: x11 (sin GPU)")
+        print(f"Sistema Operativo: {cls.SYSTEM}")
+        print(f"Núcleos de CPU: {cls.CPU_CORES}")
+        print(f"Memoria RAM: {cls.MEMORY_GB:.1f} GB")
+        print(f"Modo de rendimiento: {'⚡ Bajo Consumo (Low-end) ⚡' if cls.IS_LOW_END else 'Estándar'}")
+        print(f"Filtro de resolución: {cls.YTDL_FORMAT.split('+')[0]}")
+        print(f"Salida de Video (VO): gpu + vaapi (Aceleración activa)")
