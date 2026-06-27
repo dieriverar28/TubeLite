@@ -26,21 +26,19 @@ class Player:
             title: Título del video (opcional)
         """
         try:
-            # Construir comando con opciones de Config
+            # Construir comando partiendo desde la base "mpv"
             cmd = ["mpv"]
             
-            # Agregar opciones base
+            # Agrega directamente todas las opciones optimizadas de config.py
+            # (Esto ya incluye el --vo=gpu, --hwdec=vaapi y el --ytdl-format dinámico)
             cmd.extend(Config.MPV_OPTS)
             
-            # Formato de video para baja latencia
-            ytdl_format = f"{Config.VIDEO_QUALITY}+{Config.AUDIO_QUALITY}/best"
-            cmd.append(f"--ytdl-format={ytdl_format}")
-            
-            # Agregar URL
+            # Agregar la URL al final de los argumentos
             cmd.append(url)
             
-            logger.info(f"▶Reproduciendo: {title or url}")
-            logger.debug(f"Comando: {' '.join(cmd)}")
+            logger.info(f"▶ Reproduciendo: {title or url}")
+            # Cambiado a info para que puedas verificar el comando exacto en la terminal
+            logger.info(f"Comando ejecutado: {' '.join(cmd)}")
             
             # Popen no bloquea la interfaz GTK
             subprocess.Popen(cmd)
