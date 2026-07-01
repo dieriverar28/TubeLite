@@ -38,13 +38,29 @@ class Config:
     MPV_OPTS = [
         "--ytdl=yes",
         "--force-window=immediate",
-        "--vo=gpu",       # Cambiado a gpu (vía OpenGL) que resultó ser la más fluida
-        "--hwdec=vaapi",  # Activa la decodificación por hardware de la Radeon integrada
+        "--vo=gpu",
+        "--gpu-api=opengl", # Forzamos OpenGL directo: la Radeon del E-350 no soporta
+                             # Vulkan, asi que sin esto mpv pierde tiempo probando
+                             # libplacebo/Vulkan primero y cayendo a OpenGL despues.
+        "--hwdec=vaapi",    # Activa la decodificación por hardware de la Radeon integrada
         f"--ytdl-format={YTDL_FORMAT}",
         "--cache=yes",
         "--cache-secs=10", # Un búfer de 10 seg ayuda a evitar tirones si el internet oscila
     ]
-    
+
+    # ========== COOKIES DEL NAVEGADOR (para el bloqueo anti-bot de YouTube) ==========
+    #
+    # YouTube a veces exige verificar que no sos un bot ("Sign in to confirm
+    # you're not a bot") para ciertos videos. La forma mas confiable de
+    # evitarlo es que yt-dlp use la sesion ya logueada de tu navegador.
+    #
+    # Poné el nombre de tu navegador aca (ej: "firefox" o "chrome") SOLO si
+    # ese navegador esta instalado en este equipo y tenes sesion iniciada en
+    # YouTube/Google ahi. Dejalo en None si no queres usar esta opcion
+    # (Player reintentara igual, pero sin cookies puede seguir fallando en
+    # los videos que YouTube marque para verificacion).
+    COOKIES_FROM_BROWSER = None  # ej: "firefox"
+
     # ========== CONFIGURACIÓN DE BÚSQUEDA ==========
     
     # Número de resultados
