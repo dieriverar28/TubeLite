@@ -15,11 +15,13 @@ from thumbnails import ThumbnailLoader, THUMB_WIDTH, THUMB_HEIGHT
 from settings import get_settings, QUALITY_OPTIONS, FONT_SIZE_MIN, FONT_SIZE_MAX
 
 
-class TubeLiteWindow(Gtk.Window):
+class NitroxxxTubeLiteWindow(Gtk.Window):
     """Ventana principal de NitroxxxTubeLite v0.4"""
 
+    RESULTS_PER_PAGE = 15  # cuantos resultados se piden por tanda (busqueda inicial y cada "cargar mas")
+
     def __init__(self):
-        super().__init__(title="NitroxxxTubeLite")
+        super().__init__(title="TubeLite")
 
         # Configuracion de la ventana
         self.set_default_size(800, 600)
@@ -60,6 +62,12 @@ class TubeLiteWindow(Gtk.Window):
         # mientras la anterior todavia esta enriqueciendo resultados en
         # background, usamos esto para ignorar actualizaciones "viejas"
         self._search_token = 0
+
+        # ---- Estado para la carga infinita (mas resultados al bajar) ----
+        self._current_query = None     # busqueda activa (para saber que pedir al hacer scroll)
+        self._next_start = 1           # proximo indice a pedir cuando se pida "mas"
+        self._loading_more = False     # ya hay un pedido de "mas resultados" en curso
+        self._no_more_results = False  # la busqueda actual ya no tiene mas resultados
 
         # Crear la interfaz
         self._build_ui()
@@ -130,6 +138,11 @@ class TubeLiteWindow(Gtk.Window):
         scrolled.set_vexpand(True)
         scrolled.set_hexpand(True)
         main_box.pack_start(scrolled, True, True, 0)
+        self.scrolled = scrolled
+
+        # Detectar cuando se llega cerca del final de la lista, para
+        # cargar mas resultados automaticamente (carga infinita)
+        scrolled.get_vadjustment().connect("value-changed", self._on_scroll_changed)
 
         # ListBox para los resultados
         self.results_list = Gtk.ListBox()
@@ -295,6 +308,12 @@ class TubeLiteWindow(Gtk.Window):
         self._search_token += 1
         my_token = self._search_token
 
+        # Reiniciar el estado de la carga infinita para la nueva busqueda
+        self._current_query = query
+        self._next_start = 1
+        self._loading_more = False
+        self._no_more_results = False
+
         # Guardar en el historial y refrescar el boton de historial
         # y el autocompletado con la busqueda recien hecha
         self.history.add(query)
@@ -321,7 +340,7 @@ class TubeLiteWindow(Gtk.Window):
         en la UI. Fase 2: enriquecido en paralelo, actualiza filas de a una.
         """
         try:
-            results = self.searcher.search_fast(query, max_results=15)
+            results = self.searcher.search_fast(query, start=1, count=self.RESULTS_PER_PAGE)
             GLib.idle_add(self._display_results, results, token)
 
             if not results:
@@ -355,6 +374,12 @@ class TubeLiteWindow(Gtk.Window):
         self.row_by_id = {}
         for video in results:
             self._add_result_row(video)
+
+        # Estado de paginacion: si llegaron menos de los pedidos,
+        # significa que ya no hay mas resultados para esta busqueda
+        self._next_start = len(results) + 1
+        if len(results) < self.RESULTS_PER_PAGE:
+            self._no_more_results = True
 
         self.status_label.set_text(
             f"{len(results)} resultados encontrados. Completando detalles..."
@@ -412,6 +437,105 @@ class TubeLiteWindow(Gtk.Window):
         self.search_entry.set_sensitive(True)
         self.spinner.stop()
         self.spinner.hide()
+
+    # ------------------------------------------------------------------
+    # Carga infinita: pedir mas resultados al llegar cerca del final
+    # ------------------------------------------------------------------
+
+    def _on_scroll_changed(self, adjustment):
+        """
+        Detectar que estamos cerca del final de la lista y disparar la
+        carga de mas resultados. No hace falta que el usuario haga nada
+        mas que seguir bajando.
+        """
+        if self.is_searching or self._loading_more or self._no_more_results:
+            return
+        if not self._current_query:
+            return
+
+        value = adjustment.get_value()
+        page_size = adjustment.get_page_size()
+        upper = adjustment.get_upper()
+
+        # Umbral: cuando falten menos de 150px para llegar al final del scroll
+        if upper - (value + page_size) < 150:
+            self._load_more_results()
+
+    def _load_more_results(self):
+        """Pedir la proxima tanda de resultados de la busqueda actual."""
+        if not self._current_query or self._loading_more or self._no_more_results:
+            return
+
+        self._loading_more = True
+        token = self._search_token
+        start = self._next_start
+        query = self._current_query
+
+        self.status_label.set_text("Cargando mas resultados...")
+
+        thread = Thread(
+            target=self._load_more_in_background, args=(query, start, token)
+        )
+        thread.daemon = True
+        thread.start()
+
+    def _load_more_in_background(self, query: str, start: int, token: int):
+        """Traer la siguiente tanda (fase rapida + enriquecido), igual
+        que la busqueda inicial pero agregando filas en vez de reemplazarlas."""
+        try:
+            results = self.searcher.search_fast(
+                query, start=start, count=self.RESULTS_PER_PAGE
+            )
+            GLib.idle_add(self._append_more_results, results, start, token)
+
+            if results:
+                self.searcher.enrich_all(
+                    results,
+                    on_video_ready=lambda video: GLib.idle_add(
+                        self._update_row, video, token
+                    ),
+                    max_workers=4,
+                )
+            GLib.idle_add(self._load_more_done, token)
+
+        except Exception as e:
+            print(f"Error cargando mas resultados: {e}")
+            GLib.idle_add(self._load_more_done, token)
+
+    def _append_more_results(self, results, start: int, token: int):
+        """Agregar la nueva tanda de resultados al final de la lista."""
+        if token != self._search_token:
+            return False
+
+        if not results:
+            self._no_more_results = True
+            self.status_label.set_text(
+                f"{len(self.row_by_id)} resultados cargados (no hay mas)."
+            )
+            return False
+
+        added = 0
+        for video in results:
+            video_id = video.get("id")
+            # Evitar duplicados por si algun resultado se repite entre tandas
+            if video_id and video_id not in self.row_by_id:
+                self._add_result_row(video)
+                added += 1
+
+        self._next_start = start + len(results)
+        if len(results) < self.RESULTS_PER_PAGE:
+            self._no_more_results = True
+
+        self.results_list.show_all()
+        self.status_label.set_text(
+            f"{len(self.row_by_id)} resultados cargados. Segui bajando para ver mas."
+        )
+        return False
+
+    def _load_more_done(self, token: int):
+        if token == self._search_token:
+            self._loading_more = False
+        return False
 
     def _add_result_row(self, video: dict):
         """Agregar una fila de resultado (con placeholders si falta info)"""

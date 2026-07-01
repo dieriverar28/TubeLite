@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+#
+# Lanzador de TubeLite.
+#
+# Se puede ejecutar desde cualquier lugar (el menu de aplicaciones, un
+# acceso directo del Escritorio, o la terminal): encuentra solo la
+# carpeta del proyecto y el interprete de Python correcto, sin
+# necesidad de "cd" manual ni recordar la ruta completa.
+#
+set -e
+
+# Resolver la ubicacion real de este script (funciona aunque se
+# ejecute a traves de un enlace simbolico o desde otra carpeta)
+SCRIPT_PATH="$(readlink -f "${BASH_SOURCE[0]}")"
+PROJECT_DIR="$(dirname "$(dirname "$SCRIPT_PATH")")"
+
+# Si el proyecto tiene un entorno virtual (.venv, como sugiere el
+# README), lo usamos. Si no, caemos al Python del sistema.
+if [ -x "$PROJECT_DIR/.venv/bin/python3" ]; then
+    PYTHON="$PROJECT_DIR/.venv/bin/python3"
+else
+    PYTHON="python3"
+fi
+
+cd "$PROJECT_DIR/src"
+exec "$PYTHON" main.py "$@"
