@@ -11,7 +11,7 @@ from gi.repository import Gtk
 
 # Importar configuración y GUI
 from config import Config
-from gui import TubeLiteWindow
+from gui import NitroxxxTubeLiteWindow
 
 
 def main():
@@ -25,7 +25,7 @@ def main():
         print("=" * 50)
         
         # Crear y ejecutar ventana
-        window = TubeLiteWindow()
+        window = NitroxxxTubeLiteWindow()
         Gtk.main()
     
     except KeyboardInterrupt:
