@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-TubeLite - Cliente ligero de YouTube para equipos antiguos
+NitroxxxTubeLite - Cliente ligero de YouTube para equipos antiguos
 Versión: 0.3.0
 """
 
@@ -19,7 +19,7 @@ def main():
     try:
         # Mostrar información de configuración
         print("=" * 50)
-        print("🎬 TubeLite v0.3.0")
+        print("NitroxxxTubeLite v0.4.0")
         print("=" * 50)
         Config.print_info()
         print("=" * 50)
@@ -29,10 +29,10 @@ def main():
         Gtk.main()
     
     except KeyboardInterrupt:
-        print("\nTubeLite cerrado por el usuario")
+        print("\nNitroxxxTubeLite cerrado por el usuario")
         sys.exit(0)
     except Exception as e:
-        print(f"Error en TubeLite: {e}")
+        print(f"Error en NitroxxxTubeLite: {e}")
         sys.exit(1)
 
 

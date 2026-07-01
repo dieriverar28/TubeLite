@@ -1,4 +1,4 @@
-"""TubeLite - Lightweight YouTube client for old hardware"""
+"""NitroxxxTubeLite - Lightweight YouTube client for old hardware"""
 
 __version__ = "0.1.0"
-__author__ = "TubeLite Contributors"
+__author__ = "NitroxxxTubeLite Contributors"
