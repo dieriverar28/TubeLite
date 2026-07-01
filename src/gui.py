@@ -1,24 +1,25 @@
 """
-GUI de NitroxxTubeLite usando GTK3 - v0.4
+GUI de NitroxxxTubeLite usando GTK3 - v0.4
 Busqueda en dos fases (rapida + enriquecido progresivo) y reproduccion con mpv
 """
 
 import gi
 gi.require_version("Gtk", "3.0")
-from gi.repository import Gtk, GLib
+from gi.repository import Gtk, GLib, Gdk
 from threading import Thread
 
 from youtube import YouTubeSearcher
 from player import Player
 from history import SearchHistory
 from thumbnails import ThumbnailLoader, THUMB_WIDTH, THUMB_HEIGHT
+from settings import get_settings, QUALITY_OPTIONS, FONT_SIZE_MIN, FONT_SIZE_MAX
 
 
 class TubeLiteWindow(Gtk.Window):
-    """Ventana principal de NitroxxTubeLite v0.4"""
+    """Ventana principal de NitroxxxTubeLite v0.4"""
 
     def __init__(self):
-        super().__init__(title="NitroxxTubeLite")
+        super().__init__(title="NitroxxxTubeLite")
 
         # Configuracion de la ventana
         self.set_default_size(800, 600)
@@ -38,6 +39,19 @@ class TubeLiteWindow(Gtk.Window):
         # Cargador de miniaturas (descarga en segundo plano y cachea en disco)
         self.thumbnail_loader = ThumbnailLoader()
 
+        # Preferencias del usuario (calidad, volumen, tema, tamano de fuente)
+        self.settings = get_settings()
+
+        # Un solo CssProvider reutilizado: para cambiar el tema o el
+        # tamano de fuente en caliente, alcanza con recargar su
+        # contenido en vez de crear uno nuevo cada vez
+        self._css_provider = Gtk.CssProvider()
+        screen = Gdk.Screen.get_default()
+        if screen:
+            Gtk.StyleContext.add_provider_for_screen(
+                screen, self._css_provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+            )
+
         # Guardamos referencias a las filas por id de video para poder
         # actualizarlas en vivo cuando llega la info completa (duracion/vistas)
         self.row_by_id = {}
@@ -49,6 +63,9 @@ class TubeLiteWindow(Gtk.Window):
 
         # Crear la interfaz
         self._build_ui()
+
+        # Aplicar el tema oscuro y el tamano de fuente guardados
+        self._apply_theme_and_font()
 
     def _build_ui(self):
         """Construir la interfaz grafica"""
@@ -101,6 +118,11 @@ class TubeLiteWindow(Gtk.Window):
         self.history_button.set_popover(self._build_history_popover())
         search_box.pack_start(self.history_button, False, False, 0)
 
+        # Boton Configuracion: abre la pantalla de preferencias
+        self.settings_button = Gtk.Button(label="Configuración")
+        self.settings_button.connect("clicked", self._on_settings_clicked)
+        search_box.pack_start(self.settings_button, False, False, 0)
+
         # ========== LISTA DE RESULTADOS ==========
         # ScrolledWindow para la lista
         scrolled = Gtk.ScrolledWindow()
@@ -137,6 +159,108 @@ class TubeLiteWindow(Gtk.Window):
         # Mostrar todo
         self.show_all()
         self.spinner.hide()
+
+    def _apply_theme_and_font(self):
+        """Aplicar el tema oscuro y el tamano de fuente guardados en
+        Settings. Como reutilizamos el mismo CssProvider, alcanza con
+        recargar su contenido para que el cambio se vea al instante."""
+        gtk_settings = Gtk.Settings.get_default()
+        if gtk_settings:
+            gtk_settings.set_property(
+                "gtk-application-prefer-dark-theme",
+                bool(self.settings.get("dark_theme")),
+            )
+
+        font_size = self.settings.get("font_size")
+        css = f"* {{ font-size: {font_size}pt; }}".encode("utf-8")
+        try:
+            self._css_provider.load_from_data(css)
+        except GLib.Error as e:
+            print(f"No se pudo aplicar el tamano de fuente: {e}")
+
+    def _on_settings_clicked(self, widget):
+        """Abrir la pantalla de Configuracion (calidad, volumen, tema, fuente)."""
+        dialog = Gtk.Dialog(title="Configuración", transient_for=self, modal=True)
+        dialog.add_buttons(
+            "Restaurar valores por defecto", Gtk.ResponseType.REJECT,
+            "Cancelar", Gtk.ResponseType.CANCEL,
+            "Guardar", Gtk.ResponseType.OK,
+        )
+        dialog.set_default_response(Gtk.ResponseType.OK)
+
+        content = dialog.get_content_area()
+        content.set_spacing(10)
+        content.set_border_width(12)
+
+        grid = Gtk.Grid(row_spacing=12, column_spacing=12)
+        content.add(grid)
+
+        # Calidad de video
+        quality_label = Gtk.Label(label="Calidad de video:")
+        quality_label.set_halign(Gtk.Align.START)
+        grid.attach(quality_label, 0, 0, 1, 1)
+
+        quality_combo = Gtk.ComboBoxText()
+        for option in QUALITY_OPTIONS:
+            display = "Automática (según el hardware)" if option == "auto" else f"{option}p"
+            quality_combo.append(option, display)
+        quality_combo.set_active_id(self.settings.get("quality"))
+        grid.attach(quality_combo, 1, 0, 1, 1)
+
+        # Volumen
+        volume_label = Gtk.Label(label="Volumen:")
+        volume_label.set_halign(Gtk.Align.START)
+        grid.attach(volume_label, 0, 1, 1, 1)
+
+        volume_adj = Gtk.Adjustment(
+            value=self.settings.get("volume"), lower=0, upper=150, step_increment=5
+        )
+        volume_scale = Gtk.Scale(orientation=Gtk.Orientation.HORIZONTAL, adjustment=volume_adj)
+        volume_scale.set_digits(0)
+        volume_scale.set_hexpand(True)
+        volume_scale.set_value_pos(Gtk.PositionType.RIGHT)
+        grid.attach(volume_scale, 1, 1, 1, 1)
+
+        # Tema oscuro
+        theme_label = Gtk.Label(label="Tema oscuro:")
+        theme_label.set_halign(Gtk.Align.START)
+        grid.attach(theme_label, 0, 2, 1, 1)
+
+        theme_switch = Gtk.Switch()
+        theme_switch.set_active(bool(self.settings.get("dark_theme")))
+        theme_switch.set_halign(Gtk.Align.START)
+        grid.attach(theme_switch, 1, 2, 1, 1)
+
+        # Tamano de fuente
+        font_label = Gtk.Label(label="Tamaño de fuente:")
+        font_label.set_halign(Gtk.Align.START)
+        grid.attach(font_label, 0, 3, 1, 1)
+
+        font_adj = Gtk.Adjustment(
+            value=self.settings.get("font_size"),
+            lower=FONT_SIZE_MIN,
+            upper=FONT_SIZE_MAX,
+            step_increment=1,
+        )
+        font_spin = Gtk.SpinButton(adjustment=font_adj)
+        grid.attach(font_spin, 1, 3, 1, 1)
+
+        dialog.show_all()
+        response = dialog.run()
+
+        if response == Gtk.ResponseType.OK:
+            self.settings.set("quality", quality_combo.get_active_id())
+            self.settings.set("volume", int(volume_scale.get_value()))
+            self.settings.set("dark_theme", theme_switch.get_active())
+            self.settings.set("font_size", int(font_spin.get_value()))
+            self._apply_theme_and_font()
+            self.status_label.set_text("Configuración guardada.")
+        elif response == Gtk.ResponseType.REJECT:
+            self.settings.reset_to_defaults()
+            self._apply_theme_and_font()
+            self.status_label.set_text("Configuración restaurada a los valores por defecto.")
+
+        dialog.destroy()
 
     def _on_search_key_press(self, widget, event):
         """Escape limpia el campo de busqueda. Flecha abajo mueve el foco

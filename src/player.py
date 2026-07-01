@@ -16,6 +16,7 @@ import logging
 import threading
 import time
 from config import Config
+from settings import get_settings
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -31,10 +32,18 @@ class Player:
 
     @staticmethod
     def _build_cmd(url: str, use_cookies: bool = False) -> list:
-        """Arma el comando de mpv. Si use_cookies=True, agrega las
-        cookies del navegador configurado (para sortear el bloqueo anti-bot)."""
+        """Arma el comando de mpv. La calidad y el volumen se leen de
+        las preferencias guardadas (settings.py) en cada llamada, para
+        que un cambio en la pantalla de Configuracion aplique de
+        inmediato sin reiniciar TubeLite. Si use_cookies=True, agrega
+        las cookies del navegador configurado (para sortear el
+        bloqueo anti-bot)."""
+        settings = get_settings()
+
         cmd = ["mpv"]
         cmd.extend(Config.MPV_OPTS)
+        cmd.append(f"--ytdl-format={settings.get_ytdl_format()}")
+        cmd.append(f"--volume={settings.get('volume')}")
 
         if use_cookies and Config.COOKIES_FROM_BROWSER:
             cmd.append(
