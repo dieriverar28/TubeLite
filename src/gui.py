@@ -1,5 +1,5 @@
 """
-GUI de NitroxxxTubeLite usando GTK3 - v0.4
+GUI de NitroxxTubeLite usando GTK3 - v0.4
 Busqueda en dos fases (rapida + enriquecido progresivo) y reproduccion con mpv
 """
 
@@ -14,10 +14,10 @@ from history import SearchHistory
 
 
 class TubeLiteWindow(Gtk.Window):
-    """Ventana principal de NitroxxxTubeLite v0.4"""
+    """Ventana principal de NitroxxTubeLite v0.4"""
 
     def __init__(self):
-        super().__init__(title="TubeLite")
+        super().__init__(title="NitroxxTubeLite")
 
         # Configuracion de la ventana
         self.set_default_size(800, 600)
