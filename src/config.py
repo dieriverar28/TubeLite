@@ -1,6 +1,6 @@
 """
 Configuración de TubeLite
-Adaptada para hardware MUY antiguo (AMD E-350) con aceleración gráfica GPU/VAAPI
+Adaptada para hardware MUY antiguo con aceleración gráfica GPU/VAAPI
 """
 
 import platform
@@ -22,7 +22,7 @@ class Config:
     
     # Formato dinámico según el hardware detectado
     if IS_LOW_END:
-        # Forzamos un techo de 480p para asegurar fluidez extrema en el AMD E-350
+        # Forzamos un techo de 480p para asegurar fluidez extrema en el procesador
         YTDL_FORMAT = "bestvideo[height<=480]+bestaudio/best[height<=480]"
         VIDEO_QUALITY = "bestvideo[height<=480]"  # <-- Agregada para compatibilidad
         AUDIO_QUALITY = "bestaudio[aext=m4a]/bestaudio"
