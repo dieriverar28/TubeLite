@@ -10,13 +10,14 @@ from threading import Thread
 
 from youtube import YouTubeSearcher
 from player import Player
+from history import SearchHistory
 
 
 class TubeLiteWindow(Gtk.Window):
     """Ventana principal de NitroxxxTubeLite v0.4"""
 
     def __init__(self):
-        super().__init__(title="NitroxxxTubeLite")
+        super().__init__(title="TubeLite")
 
         # Configuracion de la ventana
         self.set_default_size(800, 600)
@@ -29,6 +30,9 @@ class TubeLiteWindow(Gtk.Window):
         # Inicializar buscador
         self.searcher = YouTubeSearcher()
         self.is_searching = False
+
+        # Historial de busquedas recientes (persistido en disco)
+        self.history = SearchHistory()
 
         # Guardamos referencias a las filas por id de video para poder
         # actualizarlas en vivo cuando llega la info completa (duracion/vistas)
@@ -67,6 +71,17 @@ class TubeLiteWindow(Gtk.Window):
         self.search_entry.connect("key-press-event", self._on_search_key_press)
         search_box.pack_start(self.search_entry, True, True, 0)
 
+        # Autocompletado nativo con el historial de busquedas: a medida
+        # que escribis, GTK sugiere coincidencias de busquedas anteriores
+        self.completion_store = Gtk.ListStore(str)
+        completion = Gtk.EntryCompletion()
+        completion.set_model(self.completion_store)
+        completion.set_text_column(0)
+        completion.set_minimum_key_length(1)
+        completion.set_inline_completion(False)
+        self.search_entry.set_completion(completion)
+        self._refresh_completion()
+
         # Spinner (se muestra solo mientras busca)
         self.spinner = Gtk.Spinner()
         search_box.pack_start(self.spinner, False, False, 0)
@@ -76,6 +91,11 @@ class TubeLiteWindow(Gtk.Window):
         self.search_button.set_size_request(100, -1)
         self.search_button.connect("clicked", self.on_search_clicked)
         search_box.pack_start(self.search_button, False, False, 0)
+
+        # Boton Historial: muestra las busquedas recientes en un menu
+        self.history_button = Gtk.MenuButton(label="Historial")
+        self.history_button.set_popover(self._build_history_popover())
+        search_box.pack_start(self.history_button, False, False, 0)
 
         # ========== LISTA DE RESULTADOS ==========
         # ScrolledWindow para la lista
@@ -146,6 +166,12 @@ class TubeLiteWindow(Gtk.Window):
         # Invalidar cualquier actualizacion pendiente de una busqueda anterior
         self._search_token += 1
         my_token = self._search_token
+
+        # Guardar en el historial y refrescar el boton de historial
+        # y el autocompletado con la busqueda recien hecha
+        self.history.add(query)
+        self._refresh_history_popover()
+        self._refresh_completion()
 
         # Limpiar resultados anteriores
         self.clear_results()
@@ -328,6 +354,66 @@ class TubeLiteWindow(Gtk.Window):
             self.search_entry.grab_focus()
             return True
         return False
+
+    def _build_history_popover(self) -> Gtk.Popover:
+        """Construir el menu desplegable con las busquedas recientes."""
+        popover = Gtk.Popover()
+
+        vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        vbox.set_margin_top(6)
+        vbox.set_margin_bottom(6)
+        vbox.set_margin_start(6)
+        vbox.set_margin_end(6)
+
+        items = self.history.get_all()
+
+        if not items:
+            label = Gtk.Label(label="Todavia no hay busquedas recientes")
+            label.set_opacity(0.6)
+            vbox.pack_start(label, False, False, 4)
+        else:
+            for query in items:
+                item_button = Gtk.Button(label=query)
+                item_button.set_relief(Gtk.ReliefStyle.NONE)
+                item_button.get_child().set_halign(Gtk.Align.START)
+                item_button.connect(
+                    "clicked", self._on_history_item_clicked, query, popover
+                )
+                vbox.pack_start(item_button, False, False, 0)
+
+            separator = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
+            vbox.pack_start(separator, False, False, 4)
+
+            clear_button = Gtk.Button(label="Limpiar historial")
+            clear_button.connect("clicked", self._on_clear_history_clicked, popover)
+            vbox.pack_start(clear_button, False, False, 0)
+
+        vbox.show_all()
+        popover.add(vbox)
+        return popover
+
+    def _refresh_history_popover(self):
+        """Reconstruir el menu de historial con el contenido actualizado."""
+        self.history_button.set_popover(self._build_history_popover())
+
+    def _refresh_completion(self):
+        """Actualizar las sugerencias de autocompletado con el historial."""
+        self.completion_store.clear()
+        for query in self.history.get_all():
+            self.completion_store.append([query])
+
+    def _on_history_item_clicked(self, button, query: str, popover: Gtk.Popover):
+        """Repetir una busqueda del historial al hacer clic en ella."""
+        popover.popdown()
+        self.search_entry.set_text(query)
+        self.on_search_clicked(None)
+
+    def _on_clear_history_clicked(self, button, popover: Gtk.Popover):
+        """Vaciar el historial de busquedas."""
+        self.history.clear()
+        popover.popdown()
+        self._refresh_history_popover()
+        self._refresh_completion()
 
     def on_row_activated(self, listbox, row):
         """Callback cuando se hace doble clic (o Enter) en un resultado"""
