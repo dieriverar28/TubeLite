@@ -11,6 +11,7 @@ from threading import Thread
 from youtube import YouTubeSearcher
 from player import Player
 from history import SearchHistory
+from thumbnails import ThumbnailLoader, THUMB_WIDTH, THUMB_HEIGHT
 
 
 class TubeLiteWindow(Gtk.Window):
@@ -33,6 +34,9 @@ class TubeLiteWindow(Gtk.Window):
 
         # Historial de busquedas recientes (persistido en disco)
         self.history = SearchHistory()
+
+        # Cargador de miniaturas (descarga en segundo plano y cachea en disco)
+        self.thumbnail_loader = ThumbnailLoader()
 
         # Guardamos referencias a las filas por id de video para poder
         # actualizarlas en vivo cuando llega la info completa (duracion/vistas)
@@ -289,12 +293,24 @@ class TubeLiteWindow(Gtk.Window):
         """Agregar una fila de resultado (con placeholders si falta info)"""
         row = Gtk.ListBoxRow()
 
-        # Contenedor principal
+        # Contenedor horizontal externo: miniatura a la izquierda,
+        # texto (titulo/canal/duracion/vistas) a la derecha
+        outer_hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        outer_hbox.set_margin_top(8)
+        outer_hbox.set_margin_bottom(8)
+        outer_hbox.set_margin_start(10)
+        outer_hbox.set_margin_end(10)
+
+        # Miniatura: se muestra un icono de placeholder mientras se
+        # descarga en segundo plano (no bloquea la aparicion de la fila)
+        thumb_image = Gtk.Image.new_from_icon_name(
+            "video-x-generic-symbolic", Gtk.IconSize.DIALOG
+        )
+        thumb_image.set_size_request(THUMB_WIDTH, THUMB_HEIGHT)
+        outer_hbox.pack_start(thumb_image, False, False, 0)
+
+        # Contenedor principal de texto (vertical)
         vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
-        vbox.set_margin_top(8)
-        vbox.set_margin_bottom(8)
-        vbox.set_margin_start(10)
-        vbox.set_margin_end(10)
 
         # Primera linea: Titulo + Duracion
         hbox_top = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
@@ -332,18 +348,34 @@ class TubeLiteWindow(Gtk.Window):
 
         vbox.pack_start(hbox_bottom, False, False, 0)
 
+        # El bloque de texto va a la derecha de la miniatura
+        outer_hbox.pack_start(vbox, True, True, 0)
+
         # Guardar datos del video en el row
         row.video_url = video["url"]
         row.video_id = video["id"]
         row.video_title = video["title"]
         row.duration_label = duration_label
         row.views_label = views_label
+        row.thumb_image = thumb_image
 
-        row.add(vbox)
+        row.add(outer_hbox)
         self.results_list.add(row)
 
         if video.get("id"):
             self.row_by_id[video["id"]] = row
+            self.thumbnail_loader.request(video["id"], self._on_thumbnail_ready)
+
+    def _on_thumbnail_ready(self, video_id: str, pixbuf):
+        """
+        Actualizar la miniatura de una fila cuando termina de descargarse.
+        Se llama desde GLib.idle_add, asi que ya estamos en el hilo
+        principal y es seguro tocar el widget.
+        """
+        row = self.row_by_id.get(video_id)
+        if row and hasattr(row, "thumb_image"):
+            row.thumb_image.set_from_pixbuf(pixbuf)
+        return False
 
     def _on_results_key_press(self, widget, event):
         """Escape vuelve el foco al campo de busqueda. (Enter para
@@ -437,4 +469,5 @@ class TubeLiteWindow(Gtk.Window):
 
     def on_destroy(self, widget):
         """Callback al cerrar la ventana"""
+        self.thumbnail_loader.shutdown()
         Gtk.main_quit()
