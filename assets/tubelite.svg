@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#3a4a63"/>
+      <stop offset="100%" stop-color="#232d3f"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Fondo redondeado -->
+  <rect x="4" y="4" width="120" height="120" rx="26" fill="url(#bg)"/>
+
+  <!-- Boton de reproduccion -->
+  <circle cx="64" cy="64" r="40" fill="#ffffff" opacity="0.08"/>
+  <path d="M52 42 L90 64 L52 86 Z" fill="#ffffff"/>
+
+  <!-- Detalle liviano: dos barras que sugieren velocidad/ligereza -->
+  <rect x="22" y="98" width="20" height="6" rx="3" fill="#7fd1ae"/>
+  <rect x="46" y="98" width="34" height="6" rx="3" fill="#7fd1ae" opacity="0.55"/>
+</svg>

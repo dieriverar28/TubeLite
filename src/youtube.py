@@ -16,6 +16,7 @@ busqueda dos veces en la misma sesion.
 import subprocess
 import json
 from typing import List, Dict, Callable, Optional
+from urllib.parse import quote
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
@@ -32,9 +33,18 @@ class YouTubeSearcher:
     # ------------------------------------------------------------------
     # FASE 1: busqueda rapida
     # ------------------------------------------------------------------
-    def search_fast(self, query: str, max_results: int = 10) -> List[Dict]:
+    def search_fast(self, query: str, start: int = 1, count: int = 15) -> List[Dict]:
         """
-        Busqueda RAPIDA usando --flat-playlist.
+        Busqueda RAPIDA usando --flat-playlist, trayendo un RANGO
+        especifico de resultados (start..start+count-1).
+
+        Esto permite pedir "la proxima pagina" de resultados (por
+        ejemplo, al hacer scroll hasta el final de la lista) sin
+        volver a descargar los resultados que ya se mostraron: en vez
+        de repetir ytsearch30:query para conseguir 30 resultados
+        (volviendo a traer los primeros 15 de nuevo), se usa la URL de
+        busqueda directa de YouTube junto con --playlist-items para
+        pedir solo el rango 16-30.
 
         No resuelve cada video por separado, solo lee la pagina de
         resultados de busqueda. Esto es MUCHO mas rapido (1-3 seg en
@@ -43,25 +53,31 @@ class YouTubeSearcher:
 
         Args:
             query: Termino de busqueda
-            max_results: Numero maximo de resultados
+            start: Indice del primer resultado a traer (1 = el primero)
+            count: Cuantos resultados traer a partir de start
 
         Returns:
             Lista de diccionarios con los resultados (puede tener
-            duration=0 o view_count=0 si yt-dlp no los trajo en esta fase)
+            duration=0 o view_count=0 si yt-dlp no los trajo en esta fase).
+            Una lista vacia significa que no hay mas resultados en ese rango.
         """
         query = query.strip()
         if not query:
             return []
 
-        cache_key = f"{query.lower()}::{max_results}"
+        end = start + count - 1
+        cache_key = f"{query.lower()}::{start}-{end}"
         if cache_key in self._cache:
             # Devolvemos una copia para que la UI no mute la cache
             return [dict(v) for v in self._cache[cache_key]]
 
+        search_url = f"https://www.youtube.com/results?search_query={quote(query)}"
+
         cmd = [
             self.yt_dlp_path,
-            f"ytsearch{max_results}:{query}",
+            search_url,
             "--flat-playlist",
+            "--playlist-items", f"{start}-{end}",
             "--dump-json",
             "--no-warnings",
             "--skip-download",
@@ -98,14 +114,20 @@ class YouTubeSearcher:
             except json.JSONDecodeError:
                 continue
 
+            # Con --flat-playlist a veces aparecen entradas que no son
+            # videos (por ejemplo canales). Las descartamos: un video
+            # siempre tiene id.
             video_id = entry.get("id", "")
+            if not video_id:
+                continue
+
             videos.append({
                 "id": video_id,
                 "title": entry.get("title", "Sin titulo"),
                 "duration": entry.get("duration") or 0,
                 "url": entry.get("url")
                     or entry.get("webpage_url")
-                    or (f"https://www.youtube.com/watch?v={video_id}" if video_id else ""),
+                    or f"https://www.youtube.com/watch?v={video_id}",
                 "uploader": entry.get("uploader") or entry.get("channel") or "Desconocido",
                 "view_count": entry.get("view_count") or 0,
             })
@@ -216,7 +238,7 @@ class YouTubeSearcher:
         compatibilidad, pero para la UI conviene usar search_fast()
         + enrich_all() para que los resultados aparezcan progresivamente.
         """
-        videos = self.search_fast(query, max_results=max_results)
+        videos = self.search_fast(query, start=1, count=max_results)
         if not videos:
             return []
         self.enrich_all(videos, on_video_ready=lambda v: None, only_missing=True)
