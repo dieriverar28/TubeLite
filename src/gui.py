@@ -1,5 +1,5 @@
 """
-GUI de TubeLite usando GTK3 - v0.4
+GUI de NitroxxxTubeLite usando GTK3 - v0.4
 Busqueda en dos fases (rapida + enriquecido progresivo) y reproduccion con mpv
 """
 
@@ -89,12 +89,14 @@ class TubeLiteWindow(Gtk.Window):
         self.results_list = Gtk.ListBox()
         self.results_list.set_selection_mode(Gtk.SelectionMode.SINGLE)
         self.results_list.connect("row-activated", self.on_row_activated)
+        self.results_list.connect("key-press-event", self._on_results_key_press)
         scrolled.add(self.results_list)
 
         # Placeholder inicial
         placeholder_label = Gtk.Label()
         placeholder_label.set_markup(
-            "<i>Ingresa un termino de busqueda y presiona Buscar</i>"
+            "<i>Ingresa un termino de busqueda y presiona Buscar "
+            "(o flecha abajo + Enter para navegar con el teclado)</i>"
         )
         placeholder_label.set_opacity(0.6)
         placeholder_label.show()
@@ -113,10 +115,20 @@ class TubeLiteWindow(Gtk.Window):
         self.spinner.hide()
 
     def _on_search_key_press(self, widget, event):
-        """Escape limpia el campo de busqueda"""
+        """Escape limpia el campo de busqueda. Flecha abajo mueve el foco
+        a la lista de resultados y selecciona el primero, para poder
+        navegar con el teclado sin usar el mouse."""
         from gi.repository import Gdk
         if event.keyval == Gdk.KEY_Escape:
             self.search_entry.set_text("")
+            return True
+        if event.keyval == Gdk.KEY_Down:
+            first_row = self.results_list.get_row_at_index(0)
+            if first_row:
+                self.results_list.select_row(first_row)
+                self.results_list.grab_focus()
+                first_row.grab_focus()
+            return True
         return False
 
     def on_search_clicked(self, widget):
@@ -191,9 +203,16 @@ class TubeLiteWindow(Gtk.Window):
             self._add_result_row(video)
 
         self.status_label.set_text(
-            f"{len(results)} resultados. Completando detalles..."
+            f"{len(results)} resultados encontrados. Completando detalles..."
         )
         self.results_list.show_all()
+
+        # Seleccionar el primer resultado automaticamente para poder
+        # navegar de inmediato con las flechas del teclado
+        first_row = self.results_list.get_row_at_index(0)
+        if first_row:
+            self.results_list.select_row(first_row)
+
         # OJO: is_searching se mantiene True hasta que termine el
         # enriquecido, pero ya se puede reproducir con doble clic
         self.search_button.set_sensitive(True)
@@ -219,7 +238,10 @@ class TubeLiteWindow(Gtk.Window):
     def _search_fully_done(self, token: int):
         if token != self._search_token:
             return False
-        self.status_label.set_text("Listo. Doble clic para reproducir.")
+        count = len(self.row_by_id)
+        self.status_label.set_text(
+            f"{count} resultados listos. Enter o doble clic para reproducir."
+        )
         self._finish_searching()
         return False
 
@@ -296,6 +318,16 @@ class TubeLiteWindow(Gtk.Window):
 
         if video.get("id"):
             self.row_by_id[video["id"]] = row
+
+    def _on_results_key_press(self, widget, event):
+        """Escape vuelve el foco al campo de busqueda. (Enter para
+        reproducir y las flechas para navegar ya las maneja Gtk.ListBox
+        de forma nativa, no hace falta reimplementarlas.)"""
+        from gi.repository import Gdk
+        if event.keyval == Gdk.KEY_Escape:
+            self.search_entry.grab_focus()
+            return True
+        return False
 
     def on_row_activated(self, listbox, row):
         """Callback cuando se hace doble clic (o Enter) en un resultado"""
