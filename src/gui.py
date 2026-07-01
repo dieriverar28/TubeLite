@@ -13,10 +13,10 @@ from player import Player
 
 
 class TubeLiteWindow(Gtk.Window):
-    """Ventana principal de TubeLite v0.4"""
+    """Ventana principal de NitroxxxTubeLite v0.4"""
 
     def __init__(self):
-        super().__init__(title="TubeLite")
+        super().__init__(title="NitroxxxTubeLite")
 
         # Configuracion de la ventana
         self.set_default_size(800, 600)
