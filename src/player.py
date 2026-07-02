@@ -31,7 +31,7 @@ class Player:
     """Control del reproductor mpv optimizado, con reintento automatico"""
 
     @staticmethod
-    def _build_cmd(url: str, use_cookies: bool = False) -> list:
+    def _build_cmd(url: str, use_cookies: bool = False, fallback_vo: bool = False) -> list:
         """Arma el comando de mpv. La calidad y el volumen se leen de
         las preferencias guardadas (settings.py) en cada llamada, para
         que un cambio en la pantalla de Configuracion aplique de
@@ -44,6 +44,10 @@ class Player:
         cmd.extend(Config.MPV_OPTS)
         cmd.append(f"--ytdl-format={settings.get_ytdl_format()}")
         cmd.append(f"--volume={settings.get('volume')}")
+        
+        if fallback_vo:
+            cmd.append("--vo=x11")
+            cmd.append("--hwdec=no")
 
         if use_cookies and Config.COOKIES_FROM_BROWSER:
             cmd.append(
@@ -89,6 +93,10 @@ class Player:
                         detected["value"] = "dns"
                     elif "Sign in to confirm" in line or "not a bot" in line:
                         detected["value"] = "bot"
+                    elif ("No 3D enabled" in line
+                            or "DRI3 error" in line
+                            or "Could not get DRI3" in line):
+                        detected["value"] = "vo"
             except Exception:
                 pass
 
@@ -170,7 +178,26 @@ class Player:
                         "navegador y evite este bloqueo."
                     )
                 return
-
+            if status == "vo":
+                logger.warning(
+                    "No se pudo inicializar la salida de video por GPU "
+                    "(comun en maquinas virtuales sin aceleracion 3D "
+                    "habilitada). Reintentando con salida de video "
+                    "basica, sin aceleracion por hardware..."
+                )
+                cmd = Player._build_cmd(url, use_cookies=False, fallback_vo=True)
+                proc, status = Player._run_once(cmd)
+                if status == "ok":
+                    return
+                logger.error(
+                    "Sigue sin poder reproducir incluso con salida de video "
+                    "basica. Si esta en una maquina virtual (VirtualBox, "
+                    "VMware), active la aceleracion 3D en la configuracion "
+                    "de Pantalla de la VM e instale las Guest Additions. "
+                    "Si esto es hardware real, revise que los drivers de "
+                    "video esten bien instalados."
+                )
+                return
             logger.error(
                 f"mpv no pudo reproducir '{title or url}' (motivo no identificado, "
                 "revisa el log de arriba para mas detalle)."

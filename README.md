@@ -19,14 +19,25 @@ Diseñado para:
 ## Instalación
 
 ```bash
-git clone https://github.com/tu-usuario/tubelite.git
+git clone https://github.com/dieriverar28/tubelite.git
 cd tubelite
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 python3 src/main.py
 ```
+si no lo de arriba no funciona es pq tiene confictos con .venv
+hacer esto:
 
+```bash
+git clone https://github.com/dieriverar28/tubelite.git
+cd tubelite
+rm -rf ~/TubeLite/.venv 
+./install.sh
+
+```
+despues de la instalacion instalar mpv, python3-gi y gir1.2-gtk-3.0 por 
+separado si da error, antes de eso tener actualizado: sudo apt upgrade && sudo apt update:
 ## Dependencias del sistema
 
 ```bash
