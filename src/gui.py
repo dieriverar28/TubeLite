@@ -21,7 +21,7 @@ class NitroxxxTubeLiteWindow(Gtk.Window):
     RESULTS_PER_PAGE = 15  # cuantos resultados se piden por tanda (busqueda inicial y cada "cargar mas")
 
     def __init__(self):
-        super().__init__(title="TubeLite")
+        super().__init__(title="NitroxxxTubeLite")
 
         # Configuracion de la ventana
         self.set_default_size(800, 600)
@@ -101,7 +101,7 @@ class NitroxxxTubeLiteWindow(Gtk.Window):
         search_box.pack_start(self.search_entry, True, True, 0)
 
         # Autocompletado nativo con el historial de busquedas: a medida
-        # que escribis, GTK sugiere coincidencias de busquedas anteriores
+        # que escribes, GTK sugiere coincidencias de busquedas anteriores
         self.completion_store = Gtk.ListStore(str)
         completion = Gtk.EntryCompletion()
         completion.set_model(self.completion_store)
@@ -297,11 +297,11 @@ class NitroxxxTubeLiteWindow(Gtk.Window):
         query = self.search_entry.get_text().strip()
 
         if not query:
-            self.status_label.set_text("Ingresa un termino de busqueda")
+            self.status_label.set_text("Ingresa un término de búsqueda")
             return
 
         if self.is_searching:
-            self.status_label.set_text("Ya hay una busqueda en progreso...")
+            self.status_label.set_text("Ya hay una búsqueda en progreso...")
             return
 
         # Invalidar cualquier actualizacion pendiente de una busqueda anterior
@@ -382,7 +382,7 @@ class NitroxxxTubeLiteWindow(Gtk.Window):
             self._no_more_results = True
 
         self.status_label.set_text(
-            f"{len(results)} resultados encontrados. Completando detalles..."
+            f"{len(results)} Resultados Encontrados. Completando Detalles..."
         )
         self.results_list.show_all()
 
@@ -419,7 +419,7 @@ class NitroxxxTubeLiteWindow(Gtk.Window):
             return False
         count = len(self.row_by_id)
         self.status_label.set_text(
-            f"{count} resultados listos. Enter o doble clic para reproducir."
+            f"{count} Resultados Listos. Enter o doble clic para reproducir."
         )
         self._finish_searching()
         return False
@@ -427,7 +427,7 @@ class NitroxxxTubeLiteWindow(Gtk.Window):
     def _search_error(self, error: str, token: int):
         if token != self._search_token:
             return False
-        self.status_label.set_text(f"Error en la busqueda: {error}")
+        self.status_label.set_text(f"Error en la búsqueda: {error}")
         self._finish_searching()
         return False
 
@@ -471,7 +471,7 @@ class NitroxxxTubeLiteWindow(Gtk.Window):
         start = self._next_start
         query = self._current_query
 
-        self.status_label.set_text("Cargando mas resultados...")
+        self.status_label.set_text("Cargando más resultados...")
 
         thread = Thread(
             target=self._load_more_in_background, args=(query, start, token)
@@ -499,7 +499,7 @@ class NitroxxxTubeLiteWindow(Gtk.Window):
             GLib.idle_add(self._load_more_done, token)
 
         except Exception as e:
-            print(f"Error cargando mas resultados: {e}")
+            print(f"Error cargando más resultados: {e}")
             GLib.idle_add(self._load_more_done, token)
 
     def _append_more_results(self, results, start: int, token: int):
@@ -510,7 +510,7 @@ class NitroxxxTubeLiteWindow(Gtk.Window):
         if not results:
             self._no_more_results = True
             self.status_label.set_text(
-                f"{len(self.row_by_id)} resultados cargados (no hay mas)."
+                f"{len(self.row_by_id)} Resultados Cargados (no hay más)."
             )
             return False
 
@@ -528,7 +528,7 @@ class NitroxxxTubeLiteWindow(Gtk.Window):
 
         self.results_list.show_all()
         self.status_label.set_text(
-            f"{len(self.row_by_id)} resultados cargados. Segui bajando para ver mas."
+            f"{len(self.row_by_id)} Resultados Cargados. Sigue bajando para ver más."
         )
         return False
 

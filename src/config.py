@@ -52,13 +52,13 @@ class Config:
 
     # ========== COOKIES DEL NAVEGADOR (para el bloqueo anti-bot de YouTube) ==========
     #
-    # YouTube a veces exige verificar que no sos un bot ("Sign in to confirm
+    # YouTube a veces exige verificar que no eres un bot ("Sign in to confirm
     # you're not a bot") para ciertos videos. La forma mas confiable de
     # evitarlo es que yt-dlp use la sesion ya logueada de tu navegador.
     #
-    # Poné el nombre de tu navegador aca (ej: "firefox" o "chrome") SOLO si
+    # Pon el nombre de tu navegador aca (ej: "firefox" o "chrome") SOLO si
     # ese navegador esta instalado en este equipo y tenes sesion iniciada en
-    # YouTube/Google ahi. Dejalo en None si no queres usar esta opcion
+    # YouTube/Google ahi. Dejalo en None si no quieres usar esta opcion
     # (Player reintentara igual, pero sin cookies puede seguir fallando en
     # los videos que YouTube marque para verificacion).
     COOKIES_FROM_BROWSER = None  # ej: "firefox"
