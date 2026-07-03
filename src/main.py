@@ -25,7 +25,7 @@ def main():
         print("=" * 50)
         
         # Crear y ejecutar ventana
-        window = NitroxxxTubeLiteWindow()
+        window = TubeLiteWindow()
         Gtk.main()
     
     except KeyboardInterrupt:
