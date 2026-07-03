@@ -1,5 +1,5 @@
 """
-GUI de NitroxxxTubeLite usando GTK3 - v0.4
+GUI de TubeLite usando GTK3 - v0.4
 Busqueda en dos fases (rapida + enriquecido progresivo) y reproduccion con mpv
 """
 
@@ -12,16 +12,17 @@ from youtube import YouTubeSearcher
 from player import Player
 from history import SearchHistory
 from thumbnails import ThumbnailLoader, THUMB_WIDTH, THUMB_HEIGHT
+from settings import get_settings, QUALITY_OPTIONS, FONT_SIZE_MIN, FONT_SIZE_MAX
 from favorites import get_favorites
 
 
-class NitroxxxTubeLiteWindow(Gtk.Window):
-    """Ventana principal de NitroxxxTubeLite v0.4"""
+class TubeLiteWindow(Gtk.Window):
+    """Ventana principal de TubeLite v0.4"""
 
     RESULTS_PER_PAGE = 15  # cuantos resultados se piden por tanda (busqueda inicial y cada "cargar mas")
 
     def __init__(self):
-        super().__init__(title="NitroxxxTubeLite")
+        super().__init__(title="TubeLite")
 
         # Configuracion de la ventana
         self.set_default_size(800, 600)
@@ -72,9 +73,10 @@ class NitroxxxTubeLiteWindow(Gtk.Window):
         self._next_start = 1           # proximo indice a pedir cuando se pida "mas"
         self._loading_more = False     # ya hay un pedido de "mas resultados" en curso
         self._no_more_results = False  # la busqueda actual ya no tiene mas resultados
+
         # Si la reproduccion automatica llega al final de los
-        # resultados cargados y todavia hay mas por pedir, se guarda
-        # aca en que indice de la lista debe seguir reproduciendo
+        # resultados cargados y todavia hay mas por pedir, guardamos
+        # aca en que indice de la lista deberia seguir reproduciendo
         # apenas terminen de cargar
         self._autoplay_after_more_index = None
 
@@ -99,11 +101,6 @@ class NitroxxxTubeLiteWindow(Gtk.Window):
         search_label = Gtk.Label(label="Buscar:")
         search_box.pack_start(search_label, False, False, 0)
 
-        # Boton Favoritos: muestra los videos guardados en un menu
-        self.favorites_button = Gtk.MenuButton(label="Favoritos")
-        self.favorites_button.set_popover(self._build_favorites_popover())
-        search_box.pack_start(self.favorites_button, False, False, 0)
-
         # Input de busqueda
         self.search_entry = Gtk.Entry()
         self.search_entry.set_placeholder_text("Ej: Linux tutorial, Python...")
@@ -115,7 +112,7 @@ class NitroxxxTubeLiteWindow(Gtk.Window):
         search_box.pack_start(self.search_entry, True, True, 0)
 
         # Autocompletado nativo con el historial de busquedas: a medida
-        # que escribes, GTK sugiere coincidencias de busquedas anteriores
+        # que escribis, GTK sugiere coincidencias de busquedas anteriores
         self.completion_store = Gtk.ListStore(str)
         completion = Gtk.EntryCompletion()
         completion.set_model(self.completion_store)
@@ -139,6 +136,11 @@ class NitroxxxTubeLiteWindow(Gtk.Window):
         self.history_button = Gtk.MenuButton(label="Historial")
         self.history_button.set_popover(self._build_history_popover())
         search_box.pack_start(self.history_button, False, False, 0)
+
+        # Boton Favoritos: muestra los videos guardados en un menu
+        self.favorites_button = Gtk.MenuButton(label="Favoritos")
+        self.favorites_button.set_popover(self._build_favorites_popover())
+        search_box.pack_start(self.favorites_button, False, False, 0)
 
         # Boton Configuracion: abre la pantalla de preferencias
         self.settings_button = Gtk.Button(label="Configuración")
@@ -322,11 +324,11 @@ class NitroxxxTubeLiteWindow(Gtk.Window):
         query = self.search_entry.get_text().strip()
 
         if not query:
-            self.status_label.set_text("Ingresa un término de búsqueda")
+            self.status_label.set_text("Ingresa un termino de busqueda")
             return
 
         if self.is_searching:
-            self.status_label.set_text("Ya hay una búsqueda en progreso...")
+            self.status_label.set_text("Ya hay una busqueda en progreso...")
             return
 
         # Invalidar cualquier actualizacion pendiente de una busqueda anterior
@@ -339,9 +341,6 @@ class NitroxxxTubeLiteWindow(Gtk.Window):
         self._loading_more = False
         self._no_more_results = False
         self._autoplay_after_more_index = None
-
-        # Guardar en el historial
-        
 
         # Guardar en el historial y refrescar el boton de historial
         # y el autocompletado con la busqueda recien hecha
@@ -411,7 +410,7 @@ class NitroxxxTubeLiteWindow(Gtk.Window):
             self._no_more_results = True
 
         self.status_label.set_text(
-            f"{len(results)} Resultados Encontrados. Completando Detalles..."
+            f"{len(results)} resultados encontrados. Completando detalles..."
         )
         self.results_list.show_all()
 
@@ -448,7 +447,7 @@ class NitroxxxTubeLiteWindow(Gtk.Window):
             return False
         count = len(self.row_by_id)
         self.status_label.set_text(
-            f"{count} Resultados Listos. Enter o doble clic para reproducir."
+            f"{count} resultados listos. Enter o doble clic para reproducir."
         )
         self._finish_searching()
         return False
@@ -456,7 +455,7 @@ class NitroxxxTubeLiteWindow(Gtk.Window):
     def _search_error(self, error: str, token: int):
         if token != self._search_token:
             return False
-        self.status_label.set_text(f"Error en la búsqueda: {error}")
+        self.status_label.set_text(f"Error en la busqueda: {error}")
         self._finish_searching()
         return False
 
@@ -500,7 +499,7 @@ class NitroxxxTubeLiteWindow(Gtk.Window):
         start = self._next_start
         query = self._current_query
 
-        self.status_label.set_text("Cargando más resultados...")
+        self.status_label.set_text("Cargando mas resultados...")
 
         thread = Thread(
             target=self._load_more_in_background, args=(query, start, token)
@@ -528,7 +527,7 @@ class NitroxxxTubeLiteWindow(Gtk.Window):
             GLib.idle_add(self._load_more_done, token)
 
         except Exception as e:
-            print(f"Error cargando más resultados: {e}")
+            print(f"Error cargando mas resultados: {e}")
             GLib.idle_add(self._load_more_done, token)
 
     def _append_more_results(self, results, start: int, token: int):
@@ -539,7 +538,7 @@ class NitroxxxTubeLiteWindow(Gtk.Window):
         if not results:
             self._no_more_results = True
             self.status_label.set_text(
-                f"{len(self.row_by_id)} Resultados Cargados (no hay más)."
+                f"{len(self.row_by_id)} resultados cargados (no hay mas)."
             )
             return False
 
@@ -557,7 +556,7 @@ class NitroxxxTubeLiteWindow(Gtk.Window):
 
         self.results_list.show_all()
         self.status_label.set_text(
-            f"{len(self.row_by_id)} Resultados Cargados. Sigue bajando para ver más."
+            f"{len(self.row_by_id)} resultados cargados. Segui bajando para ver mas."
         )
         return False
 
@@ -566,7 +565,7 @@ class NitroxxxTubeLiteWindow(Gtk.Window):
             self._loading_more = False
 
         # Si la reproduccion automatica se quedo sin resultados y pidio
-        # una tanda nueva, ahora que ya llego, se sigue reproduciendo
+        # una tanda nueva, ahora que ya llego, seguimos reproduciendo
         # desde el primer resultado recien agregado
         if self._autoplay_after_more_index is not None:
             index = self._autoplay_after_more_index
@@ -770,7 +769,7 @@ class NitroxxxTubeLiteWindow(Gtk.Window):
         items = self.favorites.get_all()
 
         if not items:
-            label = Gtk.Label(label="Todavia no hay videos favoritos")
+            label = Gtk.Label(label="Todavia no tienes videos favoritos")
             label.set_opacity(0.6)
             vbox.pack_start(label, False, False, 4)
         else:
@@ -837,16 +836,64 @@ class NitroxxxTubeLiteWindow(Gtk.Window):
     def on_row_activated(self, listbox, row):
         """Callback cuando se hace doble clic (o Enter) en un resultado"""
         if hasattr(row, "video_url") and row.video_url:
-            # Actualizar estado
             self.status_label.set_text(f"Reproduciendo: {row.video_title}...")
+            self._play_row(row)
 
-            # Reproducir en thread para no bloquear UI
-            thread = Thread(
-                target=Player.play,
-                args=(row.video_url, row.video_title),
-                daemon=True,
-            )
-            thread.start()
+    def _play_row(self, row):
+        """
+        Reproducir un resultado de la lista. Si termina solo (llega al
+        final) y la reproduccion automatica esta activada en
+        Configuracion, reproduce el siguiente resultado de la lista
+        apenas termine.
+        """
+        def on_finished(reason):
+            GLib.idle_add(self._on_playback_finished, row, reason)
+
+        thread = Thread(
+            target=Player.play,
+            args=(row.video_url, row.video_title),
+            kwargs={"on_finished": on_finished},
+            daemon=True,
+        )
+        thread.daemon = True
+        thread.start()
+
+    def _on_playback_finished(self, row, reason):
+        """
+        Se llama en el hilo principal cuando mpv termina de reproducir
+        un resultado. Si el video llego a su fin solo (reason == "eof")
+        y la reproduccion automatica esta activada, sigue con el
+        siguiente resultado de la lista.
+        """
+        if reason != "eof" or not self.settings.get("autoplay"):
+            return False  # el usuario cerro mpv, hubo un error, o esta desactivado
+
+        next_row = self._get_next_row(row)
+
+        if next_row is None:
+            if self._no_more_results:
+                self.status_label.set_text(
+                    "No hay mas videos siguientes en esta busqueda."
+                )
+                return False
+            # Ya no quedan resultados cargados, pero la busqueda todavia
+            # puede tener mas: pedimos la proxima tanda y seguimos
+            # reproduciendo apenas llegue (ver _load_more_done)
+            self.status_label.set_text("Cargando mas resultados para seguir reproduciendo...")
+            self._autoplay_after_more_index = len(self.row_by_id)
+            self._load_more_results()
+            return False
+
+        self.results_list.select_row(next_row)
+        next_row.grab_focus()
+        self.status_label.set_text(f"Reproduciendo automáticamente: {next_row.video_title}...")
+        self._play_row(next_row)
+        return False
+
+    def _get_next_row(self, row):
+        """Obtener la fila siguiente a la dada en la lista de resultados."""
+        index = row.get_index()
+        return self.results_list.get_row_at_index(index + 1)
 
     def clear_results(self):
         """Limpiar la lista de resultados"""
