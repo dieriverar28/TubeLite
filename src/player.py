@@ -43,6 +43,21 @@ class Player:
     """Control del reproductor mpv optimizado, con reintento automatico"""
 
     @staticmethod
+    def _classify_exit_line(line: str) -> Optional[str]:
+        """Traducir la linea final de mpv a un motivo estable."""
+        if not line.startswith("Exiting..."):
+            return None
+
+        normalized = line.lower()
+        if ("end of file" in normalized
+                or "eof reached" in normalized
+                or "eof" in normalized):
+            return "eof"
+        if "quit" in normalized:
+            return "quit"
+        return "error"
+
+    @staticmethod
     def _build_cmd(url: str, use_cookies: bool = False, fallback_vo: bool = False) -> list:
         """Arma el comando de mpv. La calidad y el volumen se leen de
         las preferencias guardadas (settings.py) en cada llamada, para
@@ -114,13 +129,9 @@ class Player:
                             or "Could not get DRI3" in line):
                         detected["value"] = "vo"
 
-                    if line.startswith("Exiting..."):
-                        if "Eof reached" in line:
-                            detected["exit_reason"] = "eof"
-                        elif "Quit" in line:
-                            detected["exit_reason"] = "quit"
-                        else:
-                            detected["exit_reason"] = "error"
+                    exit_reason = Player._classify_exit_line(line)
+                    if exit_reason:
+                        detected["exit_reason"] = exit_reason
             except Exception:
                 pass
 
