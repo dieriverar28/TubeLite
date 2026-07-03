@@ -15,6 +15,7 @@ import subprocess
 import logging
 import threading
 import time
+from typing import Optional, Callable
 from config import Config
 from settings import get_settings
 
@@ -26,7 +27,18 @@ logger = logging.getLogger(__name__)
 # asumimos que esta reproduciendo con normalidad.
 FAIL_DETECTION_WINDOW = 8.0
 
+class _RunResult:
+    """Resultado de lanzar mpv una vez: el proceso, el estado inicial
+    detectado, y las referencias necesarias para poder seguir
+    monitoreando la salida hasta que el proceso termine de verdad."""
 
+    __slots__ = ("proc", "status", "detected", "reader")
+
+    def __init__(self, proc, status: str, detected: dict, reader: threading.Thread):
+        self.proc = proc
+        self.status = status
+        self.detected = detected
+        self.reader = reader
 class Player:
     """Control del reproductor mpv optimizado, con reintento automatico"""
 
@@ -58,16 +70,18 @@ class Player:
         return cmd
 
     @staticmethod
-    def _run_once(cmd: list):
+    def _run_once(cmd: list) -> "_RunResult":
         """
-        Lanza mpv y monitorea su salida durante los primeros segundos
-        para detectar errores tempranos conocidos (DNS, bot-check).
+        Lanza mpv y monitorea su salida. El hilo lector sigue
+        funcionando despues de que esta funcion retorna, asi se puede
+        usar mas adelante para saber como termino la reproduccion.
 
-        Devuelve (proceso, estado) donde estado es:
-          "ok"    -> mpv sigue vivo pasado el tiempo de deteccion (bien)
+        El "status" del resultado puede ser:
+          "ok"    -> mpv esta reproduciendo bien
           "dns"   -> fallo por DNS momentaneo
           "bot"   -> fallo por bloqueo anti-bot de YouTube
-          "other" -> fallo rapido por otro motivo no identificado
+          "vo"    -> fallo por falta de aceleracion 3D/GPU (comun en VMs)
+          "other" -> fallo por otro motivo no identificado
         """
         logger.info(f"Comando ejecutado: {' '.join(cmd)}")
 
@@ -79,15 +93,17 @@ class Player:
             bufsize=1,
         )
 
-        detected = {"value": None}
+        # "value" es el motivo de un fallo TEMPRANO. "exit_reason" es
+        # como termino la reproduccion en definitiva: "eof" (llego al
+        # final solo), "quit" (el usuario cerro mpv) o "error" (fallo
+        # durante la reproduccion, no al inicio).
+        detected = {"value": None, "exit_reason": None}
 
         def _watch_stderr():
-            # Vamos leyendo la salida de mpv linea por linea. La re-imprimimos
-            # tal cual para no perder visibilidad en la terminal (igual que antes),
-            # y de paso buscamos patrones de error conocidos.
             try:
                 for line in proc.stderr:
                     print(line, end="")
+
                     if ("Failed to resolve hostname" in line
                             or "Temporary failure in name resolution" in line):
                         detected["value"] = "dns"
@@ -97,6 +113,14 @@ class Player:
                             or "DRI3 error" in line
                             or "Could not get DRI3" in line):
                         detected["value"] = "vo"
+
+                    if line.startswith("Exiting..."):
+                        if "Eof reached" in line:
+                            detected["exit_reason"] = "eof"
+                        elif "Quit" in line:
+                            detected["exit_reason"] = "quit"
+                        else:
+                            detected["exit_reason"] = "error"
             except Exception:
                 pass
 
@@ -106,105 +130,133 @@ class Player:
         start = time.time()
         while time.time() - start < FAIL_DETECTION_WINDOW:
             if proc.poll() is not None:
-                # mpv ya termino (fallo rapido). Le damos un instante al
-                # hilo lector para que termine de procesar el stderr
-                # pendiente, si no la clasificacion del error puede
-                # perderse por una condicion de carrera.
                 reader.join(timeout=1.0)
-                return proc, (detected["value"] or "other")
+
+                # Un cierre TEMPRANO no siempre es un fallo: un video
+                # muy corto puede terminar solo (eof) o el usuario
+                # puede cerrarlo (quit) antes de la ventana de deteccion.
+                if detected["value"]:
+                    return _RunResult(proc, detected["value"], detected, reader)
+                if detected["exit_reason"] in ("eof", "quit"):
+                    return _RunResult(proc, "ok", detected, reader)
+                return _RunResult(proc, "other", detected, reader)
             time.sleep(0.3)
 
-        # Sigue vivo pasado el tiempo de deteccion -> lo damos por bueno
-        return proc, "ok"
+        return _RunResult(proc, "ok", detected, reader)
 
     @staticmethod
-    def play(url: str, title: str = ""):
+    def _wait_and_get_exit_reason(result: "_RunResult") -> Optional[str]:
+        """Esperar a que mpv termine de verdad y devolver el motivo
+        ("eof", "quit", "error" o None si no se pudo determinar)."""
+        result.proc.wait()
+        result.reader.join(timeout=1.0)
+        return result.detected.get("exit_reason")
+
+    @staticmethod
+    def _attempt_playback(url: str, title: str) -> Optional["_RunResult"]:
+        """
+        Intenta reproducir con todos los reintentos conocidos (DNS,
+        bloqueo anti-bot, falta de GPU). Devuelve el _RunResult que
+        funciono, o None si ningun intento funciono.
+        """
+        logger.info(f"Reproduciendo: {title or url}")
+
+        result = Player._run_once(Player._build_cmd(url, use_cookies=False))
+        if result.status == "ok":
+            return result
+
+        if result.status == "dns":
+            logger.warning(
+                "Fallo de DNS momentaneo al resolver el servidor de video. "
+                "Reintentando en 2 segundos..."
+            )
+            time.sleep(2)
+            result = Player._run_once(Player._build_cmd(url, use_cookies=False))
+            if result.status == "ok":
+                return result
+            logger.error(
+                "Sigue fallando tras el reintento. Puede ser un problema "
+                "de red/DNS mas persistente (revisa tu conexion)."
+            )
+            return None
+
+        if result.status == "bot":
+            if Config.COOKIES_FROM_BROWSER:
+                logger.warning(
+                    "YouTube esta pidiendo verificacion anti-bot para este "
+                    f"video. Reintentando con las cookies de {Config.COOKIES_FROM_BROWSER}..."
+                )
+                result = Player._run_once(Player._build_cmd(url, use_cookies=True))
+                if result.status == "ok":
+                    return result
+                logger.error(
+                    "YouTube sigue pidiendo verificacion incluso con cookies. "
+                    f"Revisa que tengas sesion iniciada en YouTube con {Config.COOKIES_FROM_BROWSER} "
+                    "y que ese navegador este cerrado (algunos navegadores bloquean "
+                    "el acceso a las cookies mientras estan abiertos)."
+                )
+            else:
+                logger.error(
+                    "YouTube esta pidiendo verificacion anti-bot para este video. "
+                    "Configura Config.COOKIES_FROM_BROWSER (ej: 'firefox') en "
+                    "config.py para que TubeLite use tu sesion ya logueada del "
+                    "navegador y evite este bloqueo."
+                )
+            return None
+
+        if result.status == "vo":
+            logger.warning(
+                "No se pudo inicializar la salida de video por GPU "
+                "(comun en maquinas virtuales sin aceleracion 3D "
+                "habilitada). Reintentando con salida de video "
+                "basica, sin aceleracion por hardware..."
+            )
+            result = Player._run_once(
+                Player._build_cmd(url, use_cookies=False, fallback_vo=True)
+            )
+            if result.status == "ok":
+                return result
+            logger.error(
+                "Sigue sin poder reproducir incluso con salida de video "
+                "basica. Si esta en una maquina virtual (VirtualBox, "
+                "VMware), active la aceleracion 3D en la configuracion "
+                "de Pantalla de la VM e instale las Guest Additions. "
+                "Si esto es hardware real, revise que los drivers de "
+                "video esten bien instalados."
+            )
+            return None
+
+        logger.error(
+            f"mpv no pudo reproducir '{title or url}' (motivo no identificado, "
+            "revise el log de arriba para mas detalle)."
+        )
+        return None
+
+    @staticmethod
+    def play(url: str, title: str = "", on_finished: Optional[Callable[[Optional[str]], None]] = None):
         """
         Reproducir un video de YouTube con mpv.
-        Optimizado para baja latencia en hardware antiguo, con
-        reintento automatico ante fallos transitorios conocidos.
 
         Args:
             url: URL del video
             title: Titulo del video (opcional)
+            on_finished: callback opcional, llamado UNA SOLA VEZ cuando
+                mpv termina. Recibe "eof" (termino solo), "quit" (el
+                usuario lo cerro), "error" (fallo durante la
+                reproduccion), o None (nunca llego a reproducir).
+                Se ejecuta en un hilo secundario: si toca widgets de
+                GTK, debe usar GLib.idle_add.
         """
+        reason: Optional[str] = None
         try:
-            logger.info(f"Reproduciendo: {title or url}")
-
-            # Intento 1: normal, sin cookies
-            cmd = Player._build_cmd(url, use_cookies=False)
-            proc, status = Player._run_once(cmd)
-
-            if status == "ok":
-                return
-
-            if status == "dns":
-                logger.warning(
-                    "Fallo de DNS momentaneo al resolver el servidor de video. "
-                    "Reintentando en 2 segundos..."
-                )
-                time.sleep(2)
-                cmd = Player._build_cmd(url, use_cookies=False)
-                proc, status = Player._run_once(cmd)
-                if status == "ok":
-                    return
-                logger.error(
-                    "Sigue fallando tras el reintento. Puede ser un problema "
-                    "de red/DNS mas persistente (revisa tu conexion)."
-                )
-                return
-
-            if status == "bot":
-                if Config.COOKIES_FROM_BROWSER:
-                    logger.warning(
-                        "YouTube esta pidiendo verificacion anti-bot para este "
-                        f"video. Reintentando con las cookies de {Config.COOKIES_FROM_BROWSER}..."
-                    )
-                    cmd = Player._build_cmd(url, use_cookies=True)
-                    proc, status = Player._run_once(cmd)
-                    if status == "ok":
-                        return
-                    logger.error(
-                        "YouTube sigue pidiendo verificacion incluso con cookies. "
-                        f"Revisa que tengas sesion iniciada en YouTube con {Config.COOKIES_FROM_BROWSER} "
-                        "y que ese navegador este cerrado (algunos navegadores bloquean "
-                        "el acceso a las cookies mientras estan abiertos)."
-                    )
-                else:
-                    logger.error(
-                        "YouTube esta pidiendo verificacion anti-bot para este video. "
-                        "Configura Config.COOKIES_FROM_BROWSER (ej: 'firefox') en "
-                        "config.py para que TubeLite use tu sesion ya logueada del "
-                        "navegador y evite este bloqueo."
-                    )
-                return
-            if status == "vo":
-                logger.warning(
-                    "No se pudo inicializar la salida de video por GPU "
-                    "(comun en maquinas virtuales sin aceleracion 3D "
-                    "habilitada). Reintentando con salida de video "
-                    "basica, sin aceleracion por hardware..."
-                )
-                cmd = Player._build_cmd(url, use_cookies=False, fallback_vo=True)
-                proc, status = Player._run_once(cmd)
-                if status == "ok":
-                    return
-                logger.error(
-                    "Sigue sin poder reproducir incluso con salida de video "
-                    "basica. Si esta en una maquina virtual (VirtualBox, "
-                    "VMware), active la aceleracion 3D en la configuracion "
-                    "de Pantalla de la VM e instale las Guest Additions. "
-                    "Si esto es hardware real, revise que los drivers de "
-                    "video esten bien instalados."
-                )
-                return
-            logger.error(
-                f"mpv no pudo reproducir '{title or url}' (motivo no identificado, "
-                "revisa el log de arriba para mas detalle)."
-            )
-
+            result = Player._attempt_playback(url, title)
+            if result is not None:
+                reason = Player._wait_and_get_exit_reason(result)
         except FileNotFoundError:
             logger.error("mpv no esta instalado")
-            logger.error("Instala con: sudo apt install mpv")
+            logger.error("Instale con: sudo apt install mpv")
         except Exception as e:
             logger.error(f"Error al reproducir: {e}")
+        finally:
+            if on_finished:
+                on_finished(reason)

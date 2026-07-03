@@ -12,7 +12,7 @@ from youtube import YouTubeSearcher
 from player import Player
 from history import SearchHistory
 from thumbnails import ThumbnailLoader, THUMB_WIDTH, THUMB_HEIGHT
-from settings import get_settings, QUALITY_OPTIONS, FONT_SIZE_MIN, FONT_SIZE_MAX
+from favorites import get_favorites
 
 
 class NitroxxxTubeLiteWindow(Gtk.Window):
@@ -37,6 +37,10 @@ class NitroxxxTubeLiteWindow(Gtk.Window):
 
         # Historial de busquedas recientes (persistido en disco)
         self.history = SearchHistory()
+
+        # Favoritos: videos guardados para reproducir directo, sin
+        # tener que volver a buscarlos (persistido en disco)
+        self.favorites = get_favorites()
 
         # Cargador de miniaturas (descarga en segundo plano y cachea en disco)
         self.thumbnail_loader = ThumbnailLoader()
@@ -68,6 +72,11 @@ class NitroxxxTubeLiteWindow(Gtk.Window):
         self._next_start = 1           # proximo indice a pedir cuando se pida "mas"
         self._loading_more = False     # ya hay un pedido de "mas resultados" en curso
         self._no_more_results = False  # la busqueda actual ya no tiene mas resultados
+        # Si la reproduccion automatica llega al final de los
+        # resultados cargados y todavia hay mas por pedir, se guarda
+        # aca en que indice de la lista debe seguir reproduciendo
+        # apenas terminen de cargar
+        self._autoplay_after_more_index = None
 
         # Crear la interfaz
         self._build_ui()
@@ -89,6 +98,11 @@ class NitroxxxTubeLiteWindow(Gtk.Window):
         # Label
         search_label = Gtk.Label(label="Buscar:")
         search_box.pack_start(search_label, False, False, 0)
+
+        # Boton Favoritos: muestra los videos guardados en un menu
+        self.favorites_button = Gtk.MenuButton(label="Favoritos")
+        self.favorites_button.set_popover(self._build_favorites_popover())
+        search_box.pack_start(self.favorites_button, False, False, 0)
 
         # Input de busqueda
         self.search_entry = Gtk.Entry()
@@ -258,6 +272,16 @@ class NitroxxxTubeLiteWindow(Gtk.Window):
         font_spin = Gtk.SpinButton(adjustment=font_adj)
         grid.attach(font_spin, 1, 3, 1, 1)
 
+        # Reproduccion automatica
+        autoplay_label = Gtk.Label(label="Reproducción automática:")
+        autoplay_label.set_halign(Gtk.Align.START)
+        grid.attach(autoplay_label, 0, 4, 1, 1)
+
+        autoplay_switch = Gtk.Switch()
+        autoplay_switch.set_active(bool(self.settings.get("autoplay")))
+        autoplay_switch.set_halign(Gtk.Align.START)
+        grid.attach(autoplay_switch, 1, 4, 1, 1)
+
         dialog.show_all()
         response = dialog.run()
 
@@ -266,6 +290,7 @@ class NitroxxxTubeLiteWindow(Gtk.Window):
             self.settings.set("volume", int(volume_scale.get_value()))
             self.settings.set("dark_theme", theme_switch.get_active())
             self.settings.set("font_size", int(font_spin.get_value()))
+            self.settings.set("autoplay", autoplay_switch.get_active())
             self._apply_theme_and_font()
             self.status_label.set_text("Configuración guardada.")
         elif response == Gtk.ResponseType.REJECT:
@@ -313,6 +338,10 @@ class NitroxxxTubeLiteWindow(Gtk.Window):
         self._next_start = 1
         self._loading_more = False
         self._no_more_results = False
+        self._autoplay_after_more_index = None
+
+        # Guardar en el historial
+        
 
         # Guardar en el historial y refrescar el boton de historial
         # y el autocompletado con la busqueda recien hecha
@@ -535,6 +564,30 @@ class NitroxxxTubeLiteWindow(Gtk.Window):
     def _load_more_done(self, token: int):
         if token == self._search_token:
             self._loading_more = False
+
+        # Si la reproduccion automatica se quedo sin resultados y pidio
+        # una tanda nueva, ahora que ya llego, se sigue reproduciendo
+        # desde el primer resultado recien agregado
+        if self._autoplay_after_more_index is not None:
+            index = self._autoplay_after_more_index
+            self._autoplay_after_more_index = None
+
+            if token != self._search_token:
+                return False  # el usuario empezo una busqueda nueva mientras tanto
+
+            next_row = self.results_list.get_row_at_index(index)
+            if next_row is not None:
+                self.results_list.select_row(next_row)
+                next_row.grab_focus()
+                self.status_label.set_text(
+                    f"Reproduciendo automáticamente: {next_row.video_title}..."
+                )
+                self._play_row(next_row)
+            else:
+                self.status_label.set_text(
+                    "No se encontraron mas videos para seguir reproduciendo."
+                )
+
         return False
 
     def _add_result_row(self, video: dict):
@@ -599,6 +652,14 @@ class NitroxxxTubeLiteWindow(Gtk.Window):
         # El bloque de texto va a la derecha de la miniatura
         outer_hbox.pack_start(vbox, True, True, 0)
 
+        # Estrella para marcar/desmarcar como favorito
+        is_fav = self.favorites.is_favorite(video.get("id", ""))
+        star_button = Gtk.ToggleButton(label="★" if is_fav else "☆")
+        star_button.set_relief(Gtk.ReliefStyle.NONE)
+        star_button.set_active(is_fav)
+        star_button.connect("toggled", self._on_star_toggled, video)
+        outer_hbox.pack_end(star_button, False, False, 0)
+
         # Guardar datos del video en el row
         row.video_url = video["url"]
         row.video_id = video["id"]
@@ -606,6 +667,7 @@ class NitroxxxTubeLiteWindow(Gtk.Window):
         row.duration_label = duration_label
         row.views_label = views_label
         row.thumb_image = thumb_image
+        row.star_button = star_button
 
         row.add(outer_hbox)
         self.results_list.add(row)
@@ -694,6 +756,83 @@ class NitroxxxTubeLiteWindow(Gtk.Window):
         popover.popdown()
         self._refresh_history_popover()
         self._refresh_completion()
+
+    def _build_favorites_popover(self) -> Gtk.Popover:
+        """Construir el menu desplegable con los videos favoritos."""
+        popover = Gtk.Popover()
+
+        vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        vbox.set_margin_top(6)
+        vbox.set_margin_bottom(6)
+        vbox.set_margin_start(6)
+        vbox.set_margin_end(6)
+
+        items = self.favorites.get_all()
+
+        if not items:
+            label = Gtk.Label(label="Todavia no hay videos favoritos")
+            label.set_opacity(0.6)
+            vbox.pack_start(label, False, False, 4)
+        else:
+            for video in items:
+                item_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+
+                play_button = Gtk.Button(label=video.get("title", "Sin titulo"))
+                play_button.set_relief(Gtk.ReliefStyle.NONE)
+                play_button.get_child().set_halign(Gtk.Align.START)
+                play_button.get_child().set_line_wrap(True)
+                play_button.get_child().set_max_width_chars(38)
+                play_button.set_hexpand(True)
+                play_button.connect(
+                    "clicked", self._on_favorite_item_clicked, video, popover
+                )
+                item_box.pack_start(play_button, True, True, 0)
+
+                remove_button = Gtk.Button(label="Quitar")
+                remove_button.set_relief(Gtk.ReliefStyle.NONE)
+                remove_button.connect(
+                    "clicked", self._on_favorite_remove_clicked, video, popover
+                )
+                item_box.pack_start(remove_button, False, False, 0)
+
+                vbox.pack_start(item_box, False, False, 0)
+
+        vbox.show_all()
+        popover.add(vbox)
+        return popover
+
+    def _refresh_favorites_popover(self):
+        """Reconstruir el menu de favoritos con el contenido actualizado."""
+        self.favorites_button.set_popover(self._build_favorites_popover())
+
+    def _on_favorite_item_clicked(self, button, video: dict, popover: Gtk.Popover):
+        """Reproducir un favorito directamente, sin tener que buscarlo de nuevo."""
+        popover.popdown()
+        self.status_label.set_text(f"Reproduciendo: {video.get('title', '')}...")
+        thread = Thread(
+            target=Player.play,
+            args=(video.get("url", ""), video.get("title", "")),
+            daemon=True,
+        )
+        thread.start()
+
+    def _on_favorite_remove_clicked(self, button, video: dict, popover: Gtk.Popover):
+        """Quitar un video de favoritos desde el menu."""
+        self.favorites.remove(video.get("id", ""))
+        popover.popdown()
+        self._refresh_favorites_popover()
+
+        # Si ese video esta visible en la lista de resultados actual,
+        # actualizar tambien su estrella ahi
+        row = self.row_by_id.get(video.get("id"))
+        if row and hasattr(row, "star_button"):
+            row.star_button.set_active(False)
+
+    def _on_star_toggled(self, button: Gtk.ToggleButton, video: dict):
+        """Agregar o quitar un resultado de favoritos al tocar la estrella."""
+        is_now_fav = self.favorites.toggle(video)
+        button.set_label("★" if is_now_fav else "☆")
+        self._refresh_favorites_popover()
 
     def on_row_activated(self, listbox, row):
         """Callback cuando se hace doble clic (o Enter) en un resultado"""

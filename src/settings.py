@@ -16,6 +16,7 @@ DEFAULTS = {
     "volume": 100,       # 0-150 (mpv permite pasar de 100 si hace falta)
     "dark_theme": False,
     "font_size": 10,     # tamano de fuente en puntos
+    "autoplay": True,    # reproducir el siguiente resultado de la lista cuando uno termina solo
 }
 
 QUALITY_OPTIONS = ["auto", "480", "720", "1080"]
