@@ -43,21 +43,6 @@ class Player:
     """Control del reproductor mpv optimizado, con reintento automatico"""
 
     @staticmethod
-    def _classify_exit_line(line: str) -> Optional[str]:
-        """Traducir la linea final de mpv a un motivo estable."""
-        if not line.startswith("Exiting..."):
-            return None
-
-        normalized = line.lower()
-        if ("end of file" in normalized
-                or "eof reached" in normalized
-                or "eof" in normalized):
-            return "eof"
-        if "quit" in normalized:
-            return "quit"
-        return "error"
-
-    @staticmethod
     def _build_cmd(url: str, use_cookies: bool = False, fallback_vo: bool = False) -> list:
         """Arma el comando de mpv. La calidad y el volumen se leen de
         las preferencias guardadas (settings.py) en cada llamada, para
@@ -129,9 +114,13 @@ class Player:
                             or "Could not get DRI3" in line):
                         detected["value"] = "vo"
 
-                    exit_reason = Player._classify_exit_line(line)
-                    if exit_reason:
-                        detected["exit_reason"] = exit_reason
+                    if line.startswith("Exiting..."):
+                        if "Eof reached" in line:
+                            detected["exit_reason"] = "eof"
+                        elif "Quit" in line:
+                            detected["exit_reason"] = "quit"
+                        else:
+                            detected["exit_reason"] = "error"
             except Exception:
                 pass
 
@@ -159,7 +148,6 @@ class Player:
     def _wait_and_get_exit_reason(result: "_RunResult") -> Optional[str]:
         """Esperar a que mpv termine de verdad y devolver el motivo
         ("eof", "quit", "error" o None si no se pudo determinar)."""
-        result.proc.wait()
         result.reader.join(timeout=1.0)
         return result.detected.get("exit_reason")
 
