@@ -556,7 +556,7 @@ class TubeLiteWindow(Gtk.Window):
 
         self.results_list.show_all()
         self.status_label.set_text(
-            f"{len(self.row_by_id)} resultados cargados. Segui bajando para ver mas."
+            f"{len(self.row_by_id)} resultados cargados. Sigue bajando para ver mas."
         )
         return False
 
