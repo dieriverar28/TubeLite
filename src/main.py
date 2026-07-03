@@ -11,7 +11,7 @@ from gi.repository import Gtk
 
 # Importar configuración y GUI
 from config import Config
-from gui import NitroxxxTubeLiteWindow
+from gui import TubeLiteWindow
 
 
 def main():
